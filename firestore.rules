@@ -1,6 +1,9 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    match /Users/{doc} {
+        allow read, write: if true;
+    }
     function member() {
         return request.auth != null
     }
