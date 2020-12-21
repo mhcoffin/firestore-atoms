@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function member() {
+        return request.auth != null
+    }
+
+    function after() {
+        return request.resource.data;
+    }
+
+    function before() {
+        return resource.data
+    }
+
+    match /expression-maps/{doc} {
+        function owner() {
+            return member() && resource != null && resource.data != null && resource.data.owner == request.auth.uid
+        }
+        allow create: if member() && after().owner == request.auth.uid
+        allow get, update, delete, list: if owner()
+    }
+
+    match /dashboard/{uid} {
+        allow create: if owner()
+        allow get: if true
+        allow update: if true
+
+    }
+
+    match /dashboard/{uid}/projects/{doc} {
+        function owner() {
+            return member() && request.auth.uid == uid
+        }
+        allow create, delete: if owner()
+
+        allow update: if owner()
+            && after().axes.size() < 20
+            && after().assignments.size() < 10000
+            && after().palette.size() < 1000
+
+        allow read: if owner()
+            || (member() && before().shared)
+    }
+
+    // Allow read access to shared projects
+    match /dashboard/{uid}/project/{doc} {
+        allow read: if resource.data.shared == true;
+    }
+  }
+}
