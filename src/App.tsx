@@ -3,8 +3,8 @@ import React, {Suspense, useEffect, useState} from 'react';
 import {auth, db} from './fs'
 import './App.css';
 import firebase from "firebase";
-import {useAtomCallback, useAtomValue} from "jotai/utils.cjs";
-import {firestoreAtom} from "./firestoreAtom";
+import {useAtomValue} from "jotai/utils.cjs";
+import {firestoreAtom, useFirestoreSubscriber} from "./firestoreAtom";
 
 type User = firebase.User;
 const uid = 'VRf7soDS0BQ6praLnktgJfD5CVa2'
@@ -55,10 +55,6 @@ const Reader = () => {
 
 const AnotherReader = () => {
   const [value, setValue] = useAtom(userInfoAtom)
-
-  const ts = firebase.firestore.Timestamp.now()
-  console.log(`enumberable properties: ${Object.keys(ts)}`)
-
   const handleClick = () => setValue({
     Name: {
       First: value.Name.First,
@@ -81,11 +77,7 @@ type SubscriberType<T> = {
 }
 
 const SubscribeToPage = <T extends Object>({atom, path, children, fallback}: SubscriberType<T>) => {
-  const subscriber = useAtomCallback(userInfoUpdater)
-  useEffect(() => {
-    (async () => await subscriber())()
-  }, [subscriber])
-
+  useFirestoreSubscriber(userInfoUpdater)
   if (fallback) {
     return (<Suspense fallback={fallback}>
           {children}

@@ -2,6 +2,8 @@ import {PrimitiveAtom} from "jotai";
 import firebase from 'firebase/app'
 import {suspenseAtom} from "./suspenseAtom";
 import {Getter, Setter} from "jotai/core/types";
+import {useAtomCallback} from "jotai/utils.cjs";
+import {useEffect} from "react";
 
 // Creates a firestore atom that mirrors the specified doc, as well as
 // a subscriber function that can be used to subscribe to firestore and
@@ -44,6 +46,13 @@ export const firestoreAtom = <T>(doc: firebase.firestore.DocumentReference):
   }
 
   return [store, subscriber]
+}
+
+export const useFirestoreSubscriber = (subscriber: (get: Getter, set: Setter) => () => void) => {
+  const cb = useAtomCallback(subscriber)
+  useEffect(() => {
+    (async () => await cb())()
+  }, [subscriber])
 }
 
 export const updateCarefully = (prev: any, next: any) => {
