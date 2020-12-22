@@ -16,7 +16,11 @@ type PageType = {
   }
 }
 
-const [userInfoAtom, hook] = firestoreAtom<PageType>(db.collection('Users').doc(uid))
+// userInfoAtom will be suspended until the page is read.
+// userInfoUpdater is a function that can be used to subscribe
+// to the specified collection
+const [userInfoAtom, userInfoUpdater] =
+    firestoreAtom<PageType>(db.collection('Users').doc(uid))
 
 function App() {
   return (
@@ -24,8 +28,8 @@ function App() {
         <div className="App">
           <Auth/>
           <SubscribeToPage
-              path={db.collection('Users').doc(uid)}
               atom={userInfoAtom}
+              path={db.collection('Users').doc(uid)}
               fallback={<div>Loading...</div>}
           >
             <Reader/>
@@ -52,6 +56,9 @@ const Reader = () => {
 const AnotherReader = () => {
   const [value, setValue] = useAtom(userInfoAtom)
 
+  const ts = firebase.firestore.Timestamp.now()
+  console.log(`enumberable properties: ${Object.keys(ts)}`)
+
   const handleClick = () => setValue({
     Name: {
       First: value.Name.First,
@@ -74,10 +81,10 @@ type SubscriberType<T> = {
 }
 
 const SubscribeToPage = <T extends Object>({atom, path, children, fallback}: SubscriberType<T>) => {
-  const x = useAtomCallback(hook)
+  const subscriber = useAtomCallback(userInfoUpdater)
   useEffect(() => {
-    (() => x())()
-  }, [x])
+    (async () => await subscriber())()
+  }, [subscriber])
 
   if (fallback) {
     return (<Suspense fallback={fallback}>
