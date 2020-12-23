@@ -1,32 +1,34 @@
-import {deepEqual, updateCarefully} from './firestoreAtom'
+import {testable} from './firestoreAtom'
 import firebase from 'firebase/app'
 import 'firebase/firestore'
 
+const {deq, updateConservatively} = testable
+
 describe('deep equal', () => {
   it('numbers', () => {
-    expect(deepEqual(1, 1)).toBeTruthy()
-    expect(deepEqual(1, 3)).toBeFalsy()
+    expect(deq(1, 1)).toBeTruthy()
+    expect(deq(1, 3)).toBeFalsy()
   })
   it('strings', () => {
-    expect(deepEqual('abc', 'abc')).toBeTruthy()
-    expect(deepEqual('abc', 'abd')).toBeFalsy()
+    expect(deq('abc', 'abc')).toBeTruthy()
+    expect(deq('abc', 'abd')).toBeFalsy()
   })
   it('booleans', () => {
-    expect(deepEqual(true, true)).toBeTruthy()
-    expect(deepEqual(false, false)).toBeTruthy()
-    expect(deepEqual(false, true)).toBeFalsy()
+    expect(deq(true, true)).toBeTruthy()
+    expect(deq(false, false)).toBeTruthy()
+    expect(deq(false, true)).toBeFalsy()
   })
   it('timestamps', () => {
     const t1 = firebase.firestore.Timestamp.now()
-    expect(deepEqual(t1, t1)).toBeTruthy()
+    expect(deq(t1, t1)).toBeTruthy()
     const t2 = new firebase.firestore.Timestamp(t1.seconds, t1.nanoseconds)
-    expect(deepEqual(t1, t2)).toBeTruthy()
+    expect(deq(t1, t2)).toBeTruthy()
   })
   it('objects', () => {
-    expect(deepEqual({a: 3, b: 4}, {b: 4, a: 3})).toBeTruthy()
-    expect(deepEqual({a: 3, b: 4}, {b: 4, a: 3, c: 5})).toBeFalsy()
-    expect(deepEqual({a: 3, b: 4, c: {d: 1, e: 2}}, {b: 4, a: 3, c: 5})).toBeFalsy()
-    expect(deepEqual({a: 3, b: 4, c: {d: 1, e: 2}}, {b: 4, a: 3, c: {d: 1, e: 2}})).toBeTruthy()
+    expect(deq({a: 3, b: 4}, {b: 4, a: 3})).toBeTruthy()
+    expect(deq({a: 3, b: 4}, {b: 4, a: 3, c: 5})).toBeFalsy()
+    expect(deq({a: 3, b: 4, c: {d: 1, e: 2}}, {b: 4, a: 3, c: 5})).toBeFalsy()
+    expect(deq({a: 3, b: 4, c: {d: 1, e: 2}}, {b: 4, a: 3, c: {d: 1, e: 2}})).toBeTruthy()
   })
   it('deep objects', () => {
     const a = {
@@ -47,20 +49,20 @@ describe('deep equal', () => {
       }
     }
 
-    expect(deepEqual(a, a)).toBeTruthy()
-    expect(deepEqual(a, {...a})).toBeTruthy()
+    expect(deq(a, a)).toBeTruthy()
+    expect(deq(a, {...a})).toBeTruthy()
 
     const b = JSON.parse(JSON.stringify(a))
     b.key2.keyA.keyC.keyF = 24
-    expect(deepEqual(a, b)).toBeFalsy()
+    expect(deq(a, b)).toBeFalsy()
   })
   it('arrays', () => {
     const a = [1, 2, 3, {a: 12, b: 13}]
-    expect(deepEqual(a, a)).toBeTruthy()
-    expect(deepEqual(a, [...a])).toBeTruthy()
-    expect(deepEqual(a, [1, 2, 3, {a: 12, b: 13}])).toBeTruthy()
-    expect(deepEqual(a, [1, 2, 3, {a: 12, c: 13}])).toBeFalsy()
-
+    expect(deq(a, a)).toBeTruthy()
+    expect(deq(a, [...a])).toBeTruthy()
+    expect(deq(a, [1, 2, 3, {a: 12, b: 13}])).toBeTruthy()
+    expect(deq(a, [1, 2, 3, {a: 12, c: 13}])).toBeFalsy()
+    expect(deq(a, [1, 2, 3, {a: 12, c: null}])).toBeFalsy()
   })
 })
 
@@ -72,7 +74,7 @@ describe('update', () => {
       k3: 'name'
     }
     const b = JSON.parse(JSON.stringify(a))
-    expect(updateCarefully(a, b)).toBe(a)
+    expect(updateConservatively(a, b)).toBe(a)
   })
   it('deep but eq', () => {
     const a = {
@@ -90,7 +92,7 @@ describe('update', () => {
       }
     }
     const b = JSON.parse(JSON.stringify(a))
-    expect(updateCarefully(a, b)).toBe(a)
+    expect(updateConservatively(a, b)).toBe(a)
   })
   it('shared structure', () => {
     const a = {
@@ -121,8 +123,8 @@ describe('update', () => {
         }
       }
     }
-    const c = updateCarefully(a, b)
-    expect(deepEqual(c, b)).toBeTruthy()
+    const c = updateConservatively(a, b)
+    expect(deq(c, b)).toBeTruthy()
     expect(a.k1.k2.k3).not.toBe(c.k1.k2.k3)
     expect(a.k1.k6).toBe(c.k1.k6)
   })

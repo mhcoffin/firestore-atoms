@@ -16,11 +16,17 @@ type PageType = {
   }
 }
 
+function isPageType(x: any): x is PageType {
+  return x.hasOwnProperty('Name') &&
+      x.Name.hasOwnProperty('First') && typeof x.Name.First === 'string' &&
+      x.Name.hasOwnProperty('Last') && typeof x.Name.Last === 'string'
+}
+
 // userInfoAtom will be suspended until the page is read.
 // userInfoUpdater is a function that can be used to subscribe
 // to the specified collection
 const [userInfoAtom, userInfoUpdater] =
-    firestoreAtom<PageType>(db.collection('Users').doc(uid))
+    firestoreAtom<PageType>(db.collection('Users').doc(uid), isPageType)
 
 function App() {
   return (
@@ -84,7 +90,9 @@ const SubscribeToPage = <T extends Object>({atom, path, children, fallback}: Sub
         </Suspense>
     )
   } else {
-    return <>{children}</>
+    return <>
+      {children}
+    </>
   }
 }
 
