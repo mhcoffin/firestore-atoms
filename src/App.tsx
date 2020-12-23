@@ -2,7 +2,7 @@ import {PrimitiveAtom, Provider, useAtom} from 'jotai';
 import React, {Suspense, useEffect, useState} from 'react';
 import {auth, db} from './fs'
 import './App.css';
-import firebase from "firebase";
+import firebase from "firebase/app";
 import {useAtomValue} from "jotai/utils.cjs";
 import {firestoreAtom, useFirestoreSubscriber} from "./firestoreAtom";
 

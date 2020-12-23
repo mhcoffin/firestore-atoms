@@ -3,6 +3,7 @@ import firebase from 'firebase/app'
 import {Getter, SetStateAction, Setter} from "jotai/core/types";
 import {useAtomCallback} from "jotai/utils.cjs";
 import {useEffect} from "react";
+import has = Reflect.has;
 
 type DocumentReference = firebase.firestore.DocumentReference
 
@@ -31,12 +32,22 @@ type DocumentReference = firebase.firestore.DocumentReference
 // atom while maintaining as much of the old structure as possible. This helps
 // eliminate needless re-rendering.
 //
-// If the optional 'isT' function is supplied, it is used to verify that values coming
-// from firestore are actually of type T. I.e., isT should be a type guard for T.
+// Options:
 //
+// If options.typeGuard is specified, it is applied to values read from firestore. If
+// it returns false, an error is thrown. If no typeGuard is specified, pages from
+// firestore are simply coerced to type T.
+//
+// If options.fallback is specified, attempting to read a doc that does not exist will
+// use options.fallback. If no fallback is specified, an error is thrown.
+// The fallback is not automatically written to firestore, so while
 export const firestoreAtom = <T>(
     doc: DocumentReference,
-    isT?: (x: any) => boolean): [PrimitiveAtom<T>, Subscriber] => {
+    options: {
+      typeGuard?: (x: any) => boolean,
+      fallback?: T,
+    } = {},
+): [PrimitiveAtom<T>, Subscriber] => {
   const pending = Symbol()
   const store = atom<T | typeof pending>(pending)
   const getters: ((value: T) => void)[] = []
@@ -64,16 +75,19 @@ export const firestoreAtom = <T>(
 
   const subscriber = (get: Getter, set: Setter) => {
     const unsubscribe = doc.onSnapshot(snap => {
-      const incoming = snap.data({serverTimestamps: 'estimate'}) as T
-      if (isT && !isT(incoming)) {
-        throw new Error(`value read from firestore does not satisfy type guard`)
+      if (!snap.exists && !options.fallback === undefined) {
+        throw new Error(`specified doc does not exist and no fallback was specified`)
+      }
+      const incoming = snap.exists ? snap.data({serverTimestamps: 'estimate'}) : options.fallback
+      if (options.typeGuard && !options.typeGuard(incoming)) {
+        throw new Error(`firestore page (or fallback) does not satisfy type guard`)
       }
       const prev = get(store)
-      const next = updateConservatively(prev === pending ? {} : prev, incoming)
+      const next = (prev === pending) ? (incoming as T) : updateConservatively(prev, incoming)
       set(store, next)
       while (getters.length > 0) {
         const getter = getters.shift()
-        if (getter) getter(next as T)
+        if (getter) getter(next)
       }
     })
     return () => {
@@ -105,7 +119,7 @@ const fixTimestamps = (x: any): any => {
     }
   } else if (typeof x === 'object') {
     const r: Record<string, any> = {}
-    for (const [key, value] of Object.entries(x) ) {
+    for (const [key, value] of Object.entries(x)) {
       r[key] = fixTimestamps(value)
     }
     return r
