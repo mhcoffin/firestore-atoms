@@ -36,7 +36,7 @@ type DocumentReference = firebase.firestore.DocumentReference
 //
 // If options.typeGuard is specified, it is applied to values read from firestore. If
 // it returns false, an error is thrown. If no typeGuard is specified, pages from
-// firestore are simply coerced to type T.
+// firestore are simply coerced to type T without any checking.
 //
 // If options.fallback is specified, attempting to read a doc that does not exist will
 // write the fallback value to firestore. If no fallback is specified, trying to read
@@ -58,7 +58,7 @@ export const firestoreAtom = <T>(
         if (v === pending) {
           return new Promise(resolve => getters.push(resolve))
         } else {
-          return Promise.resolve(v)
+          return v
         }
       },
       async (get, set, update: SetStateAction<T>) => {
