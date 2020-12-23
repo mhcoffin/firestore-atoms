@@ -11,25 +11,26 @@ type DocumentReference = firebase.firestore.DocumentReference
 // firestore and keep the atom up-to-date.
 //
 // The returned atom will initially be suspended I.e., will be an unresolved
-// promise. When the first value is retrieved from firestore, the promise resolves.
+// promise. When the page is first retrieved from firestore, the promise resolves.
 // Thereafter, the atom acts like a normal PrimitiveAtom<T>. Reading from it
 // will return the current value of the firestore document; updating it will
-// modify the firestore document.
+// modify the firestore document. Remote updates to the atom page will cause the
+// atom to update.
 //
-// The returned subscriber should be activated via the hook:
+// The returned subscriber should be activated in some react component via the hook:
 //
 //   useFirestoreSubscriber(subscriber)
 //
 // The subscription will be established when the component is mounted and cancelled
 // when the component is dismounted. The subscription must be done from a component
 // that does not actually use the value of atom: if you try to use the atom value
-// from the same component, it will suspend before it actually subscribes, leading to
-// deadlock.
+// from the react component that subscribes to it, it will suspend before it gets a
+// chance to subscribe.
 //
-// The subscriber is smart about updating the atom: when a new value comes in,
-// either because of a remote update or a local one, the subscriber updates the
-// atom while maintaining as much of the old structure as possible. This helps
-// eliminate needless re-rendering.
+// The subscriber is smart about updating the atom: when a new value is set,
+// either because of a remote update or a local one, the atom value is updated
+// while maintaining as much of the old structure as possible. This helps
+// eliminate unnecessary re-rendering.
 //
 // Options:
 //
@@ -38,8 +39,8 @@ type DocumentReference = firebase.firestore.DocumentReference
 // firestore are simply coerced to type T.
 //
 // If options.fallback is specified, attempting to read a doc that does not exist will
-// use options.fallback. If no fallback is specified, an error is thrown.
-// The fallback is not automatically written to firestore, so while
+// write the fallback value to firestore. If no fallback is specified, trying to read
+// a doc that does not exist causes an error to be thrown.
 export const firestoreAtom = <T>(
     doc: DocumentReference,
     options: {
@@ -73,11 +74,20 @@ export const firestoreAtom = <T>(
   )
 
   const subscriber = (get: Getter, set: Setter) => {
-    const unsubscribe = doc.onSnapshot(snap => {
-      if (!snap.exists && !options.fallback === undefined) {
-        throw new Error(`specified doc does not exist and no fallback was specified`)
+    const unsubscribe = doc.onSnapshot(async snap => {
+      if (!snap.exists) {
+        if (options.fallback) {
+          try {
+            await doc.set(options.fallback)
+            return
+          } catch (err) {
+            throw new Error(`failed to write fallback value to firestore: ${err.message}`)
+          }
+        } else {
+          throw new Error(`specified doc does not exist and no fallback was specified`)
+        }
       }
-      const incoming = snap.exists ? snap.data({serverTimestamps: 'estimate'}) : options.fallback
+      const incoming = snap.data({serverTimestamps: 'estimate'})
       if (options.typeGuard && !options.typeGuard(incoming)) {
         throw new Error(`firestore page (or fallback) does not satisfy type guard`)
       }
@@ -97,7 +107,7 @@ export const firestoreAtom = <T>(
   return [fsAtom, subscriber]
 }
 
-type Subscriber = (get: Getter, set: Setter) => () => void
+export type Subscriber = (get: Getter, set: Setter) => () => void
 
 export const useFirestoreSubscriber = (subscriber: Subscriber) => {
   const cb = useAtomCallback(subscriber)
