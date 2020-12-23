@@ -29,7 +29,7 @@ function isPageType(x: any): x is PageType {
 // userInfoUpdater is a function that can be used to subscribe
 // to the specified collection
 const [userInfoAtom, userInfoUpdater] =
-    firestoreAtom<PageType>(db.collection('Users').doc(uid), isPageType)
+    firestoreAtom<PageType>(db.collection('Users').doc(uid), {typeGuard: isPageType})
 
 function App() {
   return (

@@ -3,7 +3,6 @@ import firebase from 'firebase/app'
 import {Getter, SetStateAction, Setter} from "jotai/core/types";
 import {useAtomCallback} from "jotai/utils.cjs";
 import {useEffect} from "react";
-import has = Reflect.has;
 
 type DocumentReference = firebase.firestore.DocumentReference
 
