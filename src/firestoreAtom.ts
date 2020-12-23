@@ -51,12 +51,11 @@ export const firestoreAtom = <T>(
         }
       },
       async (get, set, update: SetStateAction<T>) => {
-        console.log(`setting...`)
         const prev = get(store)
         const base = prev === pending ? {} as T : prev
         const value = update instanceof Function ? update(base) : update
         try {
-          await doc.set(value)
+          await doc.set(fixTimestamps(value))
         } catch (error) {
           throw new Error(`failed to update page: ${error.message}`)
         }
@@ -98,6 +97,23 @@ export const useFirestoreSubscriber = (subscriber: Subscriber) => {
   }, [cb])
 }
 
+// Convert Timestamp(0, 0) to serverTimestamp()
+const fixTimestamps = (x: any): any => {
+  if (x instanceof firebase.firestore.Timestamp) {
+    if (x.seconds === 0 && x.nanoseconds === 0) {
+      return firebase.firestore.FieldValue.serverTimestamp()
+    }
+  } else if (typeof x === 'object') {
+    const r: Record<string, any> = {}
+    for (const [key, value] of Object.entries(x) ) {
+      r[key] = fixTimestamps(value)
+    }
+    return r
+  } else {
+    return x
+  }
+}
+
 // Given the previous version of an object and the current version, updateCarefully
 // generates an object that is deep-equal to curr, but shares as much structure as
 // possible with prev. If curr is itself deep-equal to prev, then the result is
@@ -106,6 +122,7 @@ export const useFirestoreSubscriber = (subscriber: Subscriber) => {
 // result will be a new object. The new object will have the same keys as curr. The
 // values for each key other than K are taken from curr; those objects will be === to
 // the parallel objects in curr. The value for K will be === to the K-subtree of curr.
+// TODO: avoid updates for timestamps that are nearly the same
 export const updateConservatively = (prev: any, curr: any) => {
   if (typeof prev !== typeof curr) {
     return curr
@@ -163,5 +180,5 @@ export const deq = (a: any, b: any) => {
 }
 
 export const testable = {
-  deq, updateConservatively
+  deq, updateConservatively, fixTimestamps
 }

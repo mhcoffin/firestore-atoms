@@ -2,7 +2,7 @@ import {testable} from './firestoreAtom'
 import firebase from 'firebase/app'
 import 'firebase/firestore'
 
-const {deq, updateConservatively} = testable
+const {deq, updateConservatively, fixTimestamps} = testable
 
 describe('deep equal', () => {
   it('numbers', () => {
@@ -127,5 +127,37 @@ describe('update', () => {
     expect(deq(c, b)).toBeTruthy()
     expect(a.k1.k2.k3).not.toBe(c.k1.k2.k3)
     expect(a.k1.k6).toBe(c.k1.k6)
+  })
+})
+
+describe('timestamps', () => {
+  it('top level', () => {
+    const a = {
+      x: 'mikey',
+      y: new firebase.firestore.Timestamp(0, 0)
+    }
+    const b = fixTimestamps(a)
+    expect(b.y).toEqual(firebase.firestore.FieldValue.serverTimestamp())
+  })
+  it('second level', () => {
+    const a = {
+      metadata: {
+        name: 'my name',
+        ts: new firebase.firestore.Timestamp(0, 0)
+      },
+      data: {
+        x: 3,
+        y: 4,
+      }
+    }
+    const b = fixTimestamps(a)
+    expect(b).toEqual(
+        {
+          ...a,
+          metadata: {
+            ...a.metadata,
+            ts: firebase.firestore.FieldValue.serverTimestamp()
+          }
+        })
   })
 })

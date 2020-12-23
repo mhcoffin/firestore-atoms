@@ -6,6 +6,8 @@ import firebase from "firebase";
 import {useAtomValue} from "jotai/utils.cjs";
 import {firestoreAtom, useFirestoreSubscriber} from "./firestoreAtom";
 
+type Timestamp = firebase.firestore.Timestamp;
+
 type User = firebase.User;
 const uid = 'VRf7soDS0BQ6praLnktgJfD5CVa2'
 
@@ -14,12 +16,13 @@ type PageType = {
     First: string
     Last: string
   }
+  CreateTime: Timestamp,
 }
 
 function isPageType(x: any): x is PageType {
-  return x.hasOwnProperty('Name') &&
-      x.Name.hasOwnProperty('First') && typeof x.Name.First === 'string' &&
-      x.Name.hasOwnProperty('Last') && typeof x.Name.Last === 'string'
+  return x.hasOwnProperty('Name')
+      && x.Name.hasOwnProperty('First') && typeof x.Name.First === 'string'
+      && x.Name.hasOwnProperty('Last') && typeof x.Name.Last === 'string'
 }
 
 // userInfoAtom will be suspended until the page is read.
@@ -65,7 +68,8 @@ const AnotherReader = () => {
     Name: {
       First: value.Name.First,
       Last: "f" + value.Name.Last,
-    }
+    },
+    CreateTime: new firebase.firestore.Timestamp(0, 0)
   })
   return (
       <>
