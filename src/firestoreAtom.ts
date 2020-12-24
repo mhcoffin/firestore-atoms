@@ -51,6 +51,7 @@ export const firestoreAtom = <T>(
   const pending = Symbol()
   const store = atom<T | typeof pending>(pending)
   const getters: ((value: T) => void)[] = []
+  const setters: any[] = []
 
   const fsAtom: WritableAtom<T, SetStateAction<T>> = atom(
       (get) => {
@@ -63,12 +64,27 @@ export const firestoreAtom = <T>(
       },
       async (get, set, update: SetStateAction<T>) => {
         const prev = get(store)
-        const base = prev === pending ? {} as T : prev
-        const value = update instanceof Function ? update(base) : update
-        try {
-          await doc.set(fixTimestamps(value))
-        } catch (error) {
-          throw new Error(`failed to update page: ${error.message}`)
+        if (prev === pending) {
+          return new Promise(resolve => {
+            const setter = () => {
+              const base = get(store) as T
+              const value = update instanceof Function ? update(base) : update
+              try {
+                doc.set(value)
+              } catch (err) {
+                throw new Error(`failed to update page: ${err.message}`)
+              }
+              resolve()
+            }
+            setters.push(setter)
+          })
+        } else {
+          const value = update instanceof Function ? update(prev) : update
+          try {
+            await doc.set(value)
+          } catch (err) {
+            throw new Error(`failed to update page: ${err.message}`)
+          }
         }
       }
   )
@@ -97,6 +113,10 @@ export const firestoreAtom = <T>(
       while (getters.length > 0) {
         const getter = getters.shift()
         if (getter) getter(next)
+      }
+      while (setters.length > 0) {
+        const setter = setters.shift()
+        if (setter) setter()
       }
     })
     return () => {

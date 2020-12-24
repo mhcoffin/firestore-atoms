@@ -3,8 +3,9 @@ import React, {Suspense, useEffect, useState} from 'react';
 import {auth, db} from './fs'
 import './App.css';
 import firebase from "firebase/app";
-import {useAtomValue} from "jotai/utils.cjs";
+import {useAtomValue, useUpdateAtom} from "jotai/utils.cjs";
 import {firestoreAtom, Subscriber, useFirestoreSubscriber} from "./firestoreAtom";
+import {userInfo} from "os";
 
 type User = firebase.User;
 const uid = 'VRf7soDS0BQ6praLnktgJfD5CVa2'
@@ -43,7 +44,8 @@ function App() {
               fallback={<div>Loading...</div>}
           >
             <Reader/>
-            <AnotherReader/>
+            <ReaderWriter/>
+            <PureWriter/>
           </SubscribeToPage>
           <SubscribeToPage
               subscriber={xInfoSubscriber}
@@ -74,7 +76,7 @@ const Reader = () => {
   return <div>json: {JSON.stringify(value)}</div>
 }
 
-const AnotherReader = () => {
+const ReaderWriter = () => {
   const [value, setValue] = useAtom(userInfoAtom)
   const handleClick = () => setValue({
     Name: {
@@ -88,6 +90,14 @@ const AnotherReader = () => {
         <button onClick={handleClick}>+</button>
       </>
   )
+}
+
+const PureWriter = () => {
+  const updateLastName = useUpdateAtom(userInfoAtom)
+  const handleClick = () => {
+    updateLastName(v => ({Name: {First: v.Name.First, Last: "p" + v.Name.Last}}))
+  }
+  return <button onClick={handleClick}>Add a p</button>
 }
 
 type SubscriberType = {
