@@ -10,24 +10,24 @@ type DocumentReference = firebase.firestore.DocumentReference
 // as well as a subscriber function that can be invoked to subscribe to
 // firestore and keep the atom up-to-date.
 //
-// The returned atom will initially be suspended I.e., will be an unresolved
-// promise. When the page is first retrieved from firestore, the promise resolves.
-// Thereafter, the atom acts like a normal PrimitiveAtom<T>. Reading from it
-// will return the current value of the firestore document; updating it will
-// modify the firestore document. Remote updates to the atom page will cause the
-// atom to update.
+// The returned atom will initially be suspended for both read and write.
+// When the subscriber has retrieved the page from firestore for the first time,
+// the promise resolves. Thereafter, the atom acts like a normal PrimitiveAtom<T>.
+// Reading from it will return the current value of the firestore document.
+// Updating it will modify the firestore document. Remote updates to the atom
+// page will cause the atom to update.
 //
 // The returned subscriber should be activated in some react component via the hook:
 //
 //   useFirestoreSubscriber(subscriber)
 //
 // The subscription will be established when the component is mounted and cancelled
-// when the component is dismounted. The subscription must be done from a component
-// that does not actually use the value of atom: if you try to use the atom value
-// from the react component that subscribes to it, it will suspend before it gets a
-// chance to subscribe.
+// when the component is dismounted. The subscription must be in from a component
+// that does not actually use the value of atom. If you try to use the atom value
+// from the same react component that subscribes to it, it will suspend before it
+// gets a chance to subscribe.
 //
-// The subscriber is smart about updating the atom: when a new value is set,
+// The subscriber tries to be smart about updating the atom: when a new value is set,
 // either because of a remote update or a local one, the atom value is updated
 // while maintaining as much of the old structure as possible. This helps
 // eliminate unnecessary re-rendering.
@@ -35,8 +35,8 @@ type DocumentReference = firebase.firestore.DocumentReference
 // Options:
 //
 // If options.typeGuard is specified, it is applied to values read from firestore. If
-// it returns false, an error is thrown. If no typeGuard is specified, pages from
-// firestore are simply coerced to type T without any checking.
+// the type guard returns false, an error is thrown. If no typeGuard is specified,
+// pages from firestore are simply coerced to type T without any checking.
 //
 // If options.fallback is specified, attempting to read a doc that does not exist will
 // write the fallback value to firestore. If no fallback is specified, trying to read
@@ -115,15 +115,10 @@ export const firestoreAtom = <T>(
       const prev = get(store)
       const next = (prev === pending) ? (incoming as T) : updateConservatively(prev, incoming)
       set(store, next)
-      setTimeout(
-          () => {
-            while (waiters.length > 0) {
-              const waiter = waiters.shift()
-              if (waiter) waiter()
-            }
-          },
-          2000
-      )
+      while (waiters.length > 0) {
+        const waiter = waiters.shift()
+        if (waiter) waiter()
+      }
     })
     return () => {
       // TODO reset atom?
@@ -163,15 +158,13 @@ const fixTimestamps = (x: any): any => {
   }
 }
 
-// Given the previous version of an object and the current version, updateCarefully
-// generates an object that is deep-equal to curr, but shares as much structure as
-// possible with prev. If curr is itself deep-equal to prev, then the result is
+// Given the previous version of an object and the current version, updateConservatively
+// generates an object that is deep-equal to curr, but conserves as much structure as
+// possible from prev. E.g., if curr is itself deep-equal to prev, then the result is
 // exactly prev. Or, suppose that prev is an object with a number of keys, and suppose
 // that curr is a copy of prev, but with the value of one key, say K, changed. Then the
-// result will be a new object. The new object will have the same keys as curr. The
-// values for each key other than K are taken from curr; those objects will be === to
-// the parallel objects in curr. The value for K will be === to the K-subtree of curr.
-// TODO: avoid updates for timestamps that are nearly the same
+// result will be {...prev, K: curr.K}. This means that any selectors (say) that depend
+// on keys other than K will not require an update, even using object equality.
 export const updateConservatively = (prev: any, curr: any) => {
   if (typeof prev !== typeof curr) {
     return curr
