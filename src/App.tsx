@@ -37,23 +37,25 @@ const [xInfoAtom, xInfoSubscriber] =
 function App() {
   return (
       <Provider>
-        <div className="App">
-          <Auth/>
-          <SubscribeToPage
-              subscriber={userSubscriber}
-              fallback={<div>Loading...</div>}
-          >
-            <Reader/>
-            <ReaderWriter/>
-            <PureWriter/>
-          </SubscribeToPage>
-          <SubscribeToPage
-              subscriber={xInfoSubscriber}
-              fallback={<div>Loading fred</div>}
-          >
-            <Fred/>
-          </SubscribeToPage>
-        </div>
+        <Suspense fallback={<div>Loading...</div>}>
+          <div className="App">
+            <Auth/>
+            <SubscribeToPage subscriber={userSubscriber}/>
+            <SubscribeToPage subscriber={xInfoSubscriber}/>
+            <Suspense fallback={<div>Reader loading...</div>}>
+              <Reader/>
+            </Suspense>
+            <Suspense fallback={<div>ReaderWriterLoading...</div>}>
+              <ReaderWriter/>
+            </Suspense>
+            <Suspense fallback={<div>PureWriter loading...</div>}>
+              <PureWriter/>
+            </Suspense>
+            <Suspense fallback={<div>Fred loading...</div>}>
+              <Fred/>
+            </Suspense>
+          </div>
+        </Suspense>
       </Provider>
   );
 }
@@ -102,22 +104,11 @@ const PureWriter = () => {
 
 type SubscriberType = {
   subscriber: Subscriber
-  children: React.ReactNode
-  fallback?: React.ReactElement
 }
 
-const SubscribeToPage = ({subscriber, children, fallback}: SubscriberType) => {
+const SubscribeToPage = ({subscriber}: SubscriberType) => {
   useFirestoreSubscriber(subscriber)
-  if (fallback) {
-    return (<Suspense fallback={fallback}>
-          {children}
-        </Suspense>
-    )
-  } else {
-    return <>
-      {children}
-    </>
-  }
+  return null
 }
 
 export default App;

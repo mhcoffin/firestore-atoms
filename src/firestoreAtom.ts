@@ -50,14 +50,19 @@ export const firestoreAtom = <T>(
 ): [PrimitiveAtom<T>, Subscriber] => {
   const pending = Symbol()
   const store = atom<T | typeof pending>(pending)
-  const getters: ((value: T) => void)[] = []
-  const setters: any[] = []
+  // Queue of pending readers and writers.
+  const waiters: (() => void)[] = []
 
   const fsAtom: WritableAtom<T, SetStateAction<T>> = atom(
       (get) => {
         const v = get(store)
         if (v === pending) {
-          return new Promise(resolve => getters.push(resolve))
+          return new Promise(resolve => {
+            const getter = () => {
+              resolve(get(store) as T)
+            }
+            waiters.push(getter)
+          })
         } else {
           return v
         }
@@ -76,7 +81,7 @@ export const firestoreAtom = <T>(
               }
               resolve()
             }
-            setters.push(setter)
+            waiters.push(setter)
           })
         } else {
           const value = update instanceof Function ? update(prev) : update
@@ -110,14 +115,15 @@ export const firestoreAtom = <T>(
       const prev = get(store)
       const next = (prev === pending) ? (incoming as T) : updateConservatively(prev, incoming)
       set(store, next)
-      while (getters.length > 0) {
-        const getter = getters.shift()
-        if (getter) getter(next)
-      }
-      while (setters.length > 0) {
-        const setter = setters.shift()
-        if (setter) setter()
-      }
+      setTimeout(
+          () => {
+            while (waiters.length > 0) {
+              const waiter = waiters.shift()
+              if (waiter) waiter()
+            }
+          },
+          2000
+      )
     })
     return () => {
       // TODO reset atom?
