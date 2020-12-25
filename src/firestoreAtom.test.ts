@@ -1,8 +1,8 @@
-import {testable} from './firestoreAtom'
+import {CREATE_TS, MODIFY_TS, testable} from './firestoreAtom'
 import firebase from 'firebase/app'
 import 'firebase/firestore'
 
-const {deq, updateConservatively, fixTimestamps} = testable
+const {deq, updateConservatively, firestoreDiff} = testable
 
 describe('deep equal', () => {
   it('numbers', () => {
@@ -130,34 +130,179 @@ describe('update', () => {
   })
 })
 
-describe('timestamps', () => {
-  it('top level', () => {
+describe('diff', () => {
+  const DELETE = firebase.firestore.FieldValue.delete()
+  it('int', () => {
     const a = {
-      x: 'mikey',
-      y: new firebase.firestore.Timestamp(0, 0)
+      b: 1,
+      c: 2,
+      d: 3,
+      e: 4,
     }
-    const b = fixTimestamps(a)
-    expect(b.y).toEqual(firebase.firestore.FieldValue.serverTimestamp())
+    const b = {
+      b: 1,
+      c: 3,
+      d: undefined,
+      f: 5,
+    }
+    const diff = firestoreDiff(a, b)
+    expect(diff).toEqual({c: 3, d: DELETE, e: DELETE, f: 5})
   })
-  it('second level', () => {
+  it('string', () => {
     const a = {
-      metadata: {
-        name: 'my name',
-        ts: new firebase.firestore.Timestamp(0, 0)
-      },
-      data: {
-        x: 3,
-        y: 4,
+      b: '1',
+      c: '2',
+      d: '3',
+      e: '4',
+    }
+    const b = {
+      b: '1',
+      c: '3',
+      d: undefined,
+      f: '5',
+    }
+    const diff = firestoreDiff(a, b)
+    expect(diff).toEqual({c: '3', d: DELETE, e: DELETE, f: '5'})
+  })
+  it('boolean', () => {
+    const a = {
+      b: true,
+      c: false,
+      d: true,
+      e: false,
+    }
+    const b = {
+      b: true,
+      c: true,
+      d: undefined,
+      f: true,
+    }
+    const diff = firestoreDiff(a, b)
+    expect(diff).toEqual({c: true, d: DELETE, e: DELETE, f: true})
+  })
+  it('nested changes', () => {
+    const a = {
+      A: {
+        a: 1,
+        b: 2,
+        c: {
+          d: 3,
+          e: 4,
+          f: {
+            g: 5,
+            h: 6,
+          }
+        },
+        d: {
+          i: 7,
+          j: 8,
+          k: 9
+        },
+        e: {
+          f: 13,
+        }
       }
     }
-    const b = fixTimestamps(a)
-    expect(b).toEqual(
-        {
-          ...a,
-          metadata: {
-            ...a.metadata,
-            ts: firebase.firestore.FieldValue.serverTimestamp()
+    const b = {
+      A: {
+        a: 1,
+        b: 2,
+        c: {
+          d: 17,
+          e: 4,
+          f: {
+            g: 5,
+            h: 19,
           }
-        })
+        },
+        d: {
+          i: 7,
+          j: 81,
+        }
+      }
+    }
+    const diff = firestoreDiff(a, b)
+    expect(diff).toEqual({
+      'A.c.d': 17,
+      'A.c.f.h': 19,
+      'A.d.j': 81,
+      'A.d.k': DELETE,
+      'A.e': DELETE,
+    })
+  })
+  it('explicit delete', () => {
+    const a = {
+      A: 'foo',
+      B: {
+        C: 'bar',
+        D: 'zoo'
+      }
+    }
+    const b = {...a, B: {...a.B, D: undefined}}
+    expect(firestoreDiff(a, b)).toEqual({
+      'B.D': DELETE
+    })
+  })
+  it('implicit delete', () => {
+    const a = {
+      A: 'foo',
+      B: {
+        C: 'bar',
+        D: 'zoo'
+      }
+    }
+    const b = {
+      A: 'foo',
+      B: {
+        C: 'bar',
+      }
+    }
+    expect(firestoreDiff(a, b)).toEqual({
+      'B.D': DELETE,
+    })
+  })
+  it('create does not override normal timestamps', () => {
+    const a = {
+      C: firebase.firestore.Timestamp.now()
+    }
+    const b = {
+      C: CREATE_TS
+    }
+    expect(firestoreDiff(a, b)).toEqual({})
+  })
+  it('modify overrides other timestamps', () => {
+    const a = {
+      T: firebase.firestore.Timestamp.now()
+    }
+    const b = {
+      T: MODIFY_TS
+    }
+    expect(firestoreDiff(a, b)).toEqual({
+      T: firebase.firestore.FieldValue.serverTimestamp()
+    })
+  })
+  it('normal timestamps override', () => {
+    const t = new firebase.firestore.Timestamp(7, 7)
+    const a = {
+      T: firebase.firestore.Timestamp.now()
+    }
+    const b = {
+      T: t
+    }
+    expect(firestoreDiff(a, b)).toEqual({
+      T: t
+    })
+  })
+  it('timestamp can be deleted', () => {
+    const a = {
+      T: firebase.firestore.Timestamp.now(),
+      U: 'foobar'
+    }
+    const b = {
+      U: 'foobar'
+    }
+    expect(firestoreDiff(a, b)).toEqual({
+      T: firebase.firestore.FieldValue.delete()
+    })
   })
 })

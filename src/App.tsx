@@ -3,9 +3,9 @@ import React, {Suspense, useEffect, useState} from 'react';
 import {auth, db} from './fs'
 import './App.css';
 import firebase from "firebase/app";
+import 'firebase/firestore'
 import {useAtomValue, useUpdateAtom} from "jotai/utils.cjs";
 import {firestoreAtom, Subscriber, useFirestoreSubscriber} from "./firestoreAtom";
-import {userInfo} from "os";
 
 type User = firebase.User;
 const uid = 'VRf7soDS0BQ6praLnktgJfD5CVa2'

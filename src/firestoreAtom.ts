@@ -1,46 +1,64 @@
 import {atom, PrimitiveAtom, WritableAtom} from "jotai";
 import firebase from 'firebase/app'
+import 'firebase/firestore'
 import {Getter, SetStateAction, Setter} from "jotai/core/types";
 import {useAtomCallback} from "jotai/utils.cjs";
 import {useEffect} from "react";
 
 type DocumentReference = firebase.firestore.DocumentReference
 
-// Creates a firestore atom that mirrors the specified firestore document,
-// as well as a subscriber function that can be invoked to subscribe to
-// firestore and keep the atom up-to-date.
-//
-// The returned atom will initially be suspended for both read and write.
-// When the subscriber has retrieved the page from firestore for the first time,
-// the promise resolves. Thereafter, the atom acts like a normal PrimitiveAtom<T>.
-// Reading from it will return the current value of the firestore document.
-// Updating it will modify the firestore document. Remote updates to the atom
-// page will cause the atom to update.
-//
-// The returned subscriber should be activated in some react component via the hook:
-//
-//   useFirestoreSubscriber(subscriber)
-//
-// The subscription will be established when the component is mounted and cancelled
-// when the component is dismounted. The subscription must be in from a component
-// that does not actually use the value of atom. If you try to use the atom value
-// from the same react component that subscribes to it, it will suspend before it
-// gets a chance to subscribe.
-//
-// The subscriber tries to be smart about updating the atom: when a new value is set,
-// either because of a remote update or a local one, the atom value is updated
-// while maintaining as much of the old structure as possible. This helps
-// eliminate unnecessary re-rendering.
-//
-// Options:
-//
-// If options.typeGuard is specified, it is applied to values read from firestore. If
-// the type guard returns false, an error is thrown. If no typeGuard is specified,
-// pages from firestore are simply coerced to type T without any checking.
-//
-// If options.fallback is specified, attempting to read a doc that does not exist will
-// write the fallback value to firestore. If no fallback is specified, trying to read
-// a doc that does not exist causes an error to be thrown.
+/** Use this Timestamp to set a server timestamp exactly once and never update */
+export const CREATE_TS = new firebase.firestore.Timestamp(1, 1)
+
+/** Use this Timestamp to set a server timestamp on every write. */
+export const MODIFY_TS = new firebase.firestore.Timestamp(1, 2)
+
+/**
+ * Creates a firestore atom that mirrors the specified firestore document,
+ * as well as a subscriber function that can be invoked to subscribe to
+ * firestore and keep the atom up to date. The intent is that the atom
+ * mirrors the value in firestore as long as the subscriber is active.
+ *
+ * The returned atom will initially be suspended for both read and write
+ * until the subscriber fires. When the subscriber has retrieved the page
+ * from firestore for the first time, the promise resolves. Thereafter,
+ * the atom acts like a normal PrimitiveAtom<T>. Reading from it will
+ * return the current value of the firestore document. Updating it will
+ * modify the firestore document (suspending briefly). Remote updates to
+ * the atom page will cause the atom to update.
+ *
+ * The returned subscriber should be activated in some react component via
+ * the hook:
+ *
+ *   useFirestoreSubscriber(subscriber)
+ *
+ * The subscription will be established when the component is mounted and
+ * cancelled when the component is dismounted. The subscription must be
+ * established in a component that does not actually use the value of atom.
+ * If you try to use the atom value from the same react component that
+ * subscribes to it, it will suspend before it gets a chance to subscribe
+ * and you will be stuck on the Suspense fallback page.
+ *
+ * The subscriber tries to be smart about updating the atom: when a new value
+ * is set, either because of a remote update or a local one, the atom value
+ * is updated while maintaining as much of the old structure as possible.
+ * This helps eliminate unnecessary re-rendering.
+ *
+ * Options:
+ *
+ * If options.typeGuard is specified, it is applied to values read from
+ * firestore. If the type guard returns false, an error is thrown. If no
+ * typeGuard is specified, pages from firestore are simply coerced to type
+ * T without any checking and you're on your own.
+ *
+ * If options.fallback is specified, attempting to read a doc that does not
+ * exist will write the fallback value to firestore. If no fallback is
+ * specified, trying to read a doc that does not exist causes an error to
+ * be thrown.
+ *
+ * @param doc
+ * @param options
+ */
 export const firestoreAtom = <T>(
     doc: DocumentReference,
     options: {
@@ -55,8 +73,8 @@ export const firestoreAtom = <T>(
 
   const fsAtom: WritableAtom<T, SetStateAction<T>> = atom(
       (get) => {
-        const v = get(store)
-        if (v === pending) {
+        const value = get(store)
+        if (value === pending) {
           return new Promise(resolve => {
             const getter = () => {
               resolve(get(store) as T)
@@ -64,7 +82,7 @@ export const firestoreAtom = <T>(
             waiters.push(getter)
           })
         } else {
-          return v
+          return value
         }
       },
       async (get, set, update: SetStateAction<T>) => {
@@ -75,7 +93,7 @@ export const firestoreAtom = <T>(
               const base = get(store) as T
               const value = update instanceof Function ? update(base) : update
               try {
-                doc.set(value)
+                doc.update(firestoreDiff(base, value))
               } catch (err) {
                 throw new Error(`failed to update page: ${err.message}`)
               }
@@ -121,8 +139,8 @@ export const firestoreAtom = <T>(
       }
     })
     return () => {
-      // TODO reset atom?
       unsubscribe()
+      set(store, pending)
     }
   }
   return [fsAtom, subscriber]
@@ -130,6 +148,13 @@ export const firestoreAtom = <T>(
 
 export type Subscriber = (get: Getter, set: Setter) => () => void
 
+/**
+ * Hook to use a Subscriber returned from firebaseAtom. Don't use the value
+ * of the atom in the same component or you will be stuck on the fallback
+ * page.
+ *
+ * @param subscriber returned from firestoreAtom()
+ */
 export const useFirestoreSubscriber = (subscriber: Subscriber) => {
   const cb = useAtomCallback(subscriber)
   useEffect(() => {
@@ -141,30 +166,14 @@ export const useFirestoreSubscriber = (subscriber: Subscriber) => {
   }, [cb])
 }
 
-// Convert Timestamp(0, 0) to serverTimestamp()
-const fixTimestamps = (x: any): any => {
-  if (x instanceof firebase.firestore.Timestamp) {
-    if (x.seconds === 0 && x.nanoseconds === 0) {
-      return firebase.firestore.FieldValue.serverTimestamp()
-    }
-  } else if (typeof x === 'object') {
-    const r: Record<string, any> = {}
-    for (const [key, value] of Object.entries(x)) {
-      r[key] = fixTimestamps(value)
-    }
-    return r
-  } else {
-    return x
-  }
-}
-
-// Given the previous version of an object and the current version, updateConservatively
-// generates an object that is deep-equal to curr, but conserves as much structure as
-// possible from prev. E.g., if curr is itself deep-equal to prev, then the result is
-// exactly prev. Or, suppose that prev is an object with a number of keys, and suppose
-// that curr is a copy of prev, but with the value of one key, say K, changed. Then the
-// result will be {...prev, K: curr.K}. This means that any selectors (say) that depend
-// on keys other than K will not require an update, even using object equality.
+/**
+ * @param prev old verion of a JSON-ish object
+ * @param curr revised version
+ *
+ * Given the previous version of an object and the current version,
+ * updateConservatively generates an object that is deep-equal to curr,
+ * but conserves as much structure as possible from prev.
+ */
 export const updateConservatively = (prev: any, curr: any) => {
   if (typeof prev !== typeof curr) {
     return curr
@@ -221,6 +230,110 @@ export const deq = (a: any, b: any) => {
   return true
 }
 
+/**
+ * Creates a diff object that can be applied to a firestore page via update().
+ * The resulting diff will update the page to match 'after', except for two
+ * special timestamps that can be included in 'after':
+ *
+ * - If 'after' contains an entry with value CREATE_TS, this field will be
+ * omitted in the diff if 'before' already contains a timestamp in the parallel
+ * entry. Thus CREATE_TS will create a timestamp the first time it's used,
+ * but not change an existing timestamp.
+ *
+ * - If 'after' contains an entry with value MODIFY_TS, the diff will contain
+ * FieldValue.serverTimestamp() so that the timestamp is updated to server time
+ * on every write.
+ *
+ * @param before
+ * @param after
+ */
+const firestoreDiff = (before: any, after: any): Record<string, any> => {
+  const diff: Map<string, any> = new Map<string, any>()
+  recFirestoreDiff(before, after, [], diff)
+  return Object.fromEntries(diff.entries())
+}
+
+const recFirestoreDiff = (a: any, b: any, path: string[], diff: Map<string, any>) => {
+  switch (typ(b)) {
+    case 'error':
+      throw new Error(`illegal firebase object at ${path.join('.')}`)
+    case 'leaf':
+      if (a !== b) {
+        diff.set(path.join('.'), b)
+      }
+      return
+    case 'createTime':
+      if (typ(a) !== 'timestamp') {
+        diff.set(path.join('.'), firebase.firestore.FieldValue.serverTimestamp())
+      }
+      return;
+    case "modifyTime":
+      diff.set(path.join('.'), firebase.firestore.FieldValue.serverTimestamp())
+      return
+    case 'timestamp': {
+      const bb = b as firebase.firestore.Timestamp
+      if (!(a instanceof firebase.firestore.Timestamp) || !a.isEqual(bb)) {
+        diff.set(path.join('.'), b)
+      }
+      return
+    }
+    case 'undefined':
+      if (a !== undefined) {
+        diff.set(path.join('.'), firebase.firestore.FieldValue.delete())
+      }
+      return
+    case 'object':
+      switch (typ(a)) {
+        case 'leaf':
+        case 'timestamp':
+        case 'createTime':  // probably cannot occur
+        case 'modifyTime':  // ditto
+        case 'error':       // ditto
+          diff.set(path.join('.'), b)
+          return
+        case 'object':
+          for (const [key, value] of Object.entries(a)) {
+            if (b.hasOwnProperty(key)) {
+              recFirestoreDiff(value, b[key], [...path, key], diff)
+            } else {
+              diff.set([...path, key].join('.'), firebase.firestore.FieldValue.delete())
+            }
+          }
+          for (const [key, value] of Object.entries(b)) {
+            if (!a.hasOwnProperty(key)) {
+              diff.set([...path, key].join('.'), value)
+            }
+          }
+      }
+  }
+}
+
+const typ = (obj: any) => {
+  switch (typeof obj) {
+    case 'number':
+    case 'string':
+    case 'boolean':
+    case 'bigint':
+      return 'leaf'
+    case 'undefined':
+      return 'undefined'
+    case 'symbol':
+    case 'function':
+      return 'error'
+    case 'object':
+      if (obj instanceof firebase.firestore.Timestamp) {
+        if (obj.seconds === CREATE_TS.seconds && obj.nanoseconds === CREATE_TS.nanoseconds) {
+          return 'createTime'
+        } else if (obj.seconds === MODIFY_TS.seconds && obj.nanoseconds === MODIFY_TS.nanoseconds) {
+          return 'modifyTime'
+        } else {
+          return 'timestamp'
+        }
+      }
+      return 'object'
+  }
+}
+
 export const testable = {
-  deq, updateConservatively, fixTimestamps
+  deq, updateConservatively, firestoreDiff
 }
