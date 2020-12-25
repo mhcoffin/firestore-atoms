@@ -14,7 +14,7 @@ export const CREATE_TS = new firebase.firestore.Timestamp(1, 1)
 export const MODIFY_TS = new firebase.firestore.Timestamp(1, 2)
 
 /**
- * Creates a firestore atom that mirrors the specified firestore document,
+ * Creates an atom that mirrors the specified firestore document,
  * as well as a subscriber function that can be invoked to subscribe to
  * firestore and keep the atom up to date. The intent is that the atom
  * mirrors the value in firestore as long as the subscriber is active.
@@ -59,7 +59,7 @@ export const MODIFY_TS = new firebase.firestore.Timestamp(1, 2)
  * @param doc
  * @param options
  */
-export const firestoreAtom = <T>(
+export const docAtom = <T>(
     doc: DocumentReference,
     options: {
       typeGuard?: (x: any) => boolean,
@@ -149,13 +149,13 @@ export const firestoreAtom = <T>(
 export type Subscriber = (get: Getter, set: Setter) => () => void
 
 /**
- * Hook to use a Subscriber returned from firebaseAtom. Don't use the value
+ * Hook to use a Subscriber returned from docAtom. Don't use the value
  * of the atom in the same component or you will be stuck on the fallback
- * page.
+ * page forever.
  *
- * @param subscriber returned from firestoreAtom()
+ * @param subscriber returned from docAtom()
  */
-export const useFirestoreSubscriber = (subscriber: Subscriber) => {
+export const useDocSubscriber = (subscriber: Subscriber) => {
   const cb = useAtomCallback(subscriber)
   useEffect(() => {
     try {
@@ -174,7 +174,7 @@ export const useFirestoreSubscriber = (subscriber: Subscriber) => {
  * updateConservatively generates an object that is deep-equal to curr,
  * but conserves as much structure as possible from prev.
  */
-export const updateConservatively = (prev: any, curr: any) => {
+const updateConservatively = (prev: any, curr: any) => {
   if (typeof prev !== typeof curr) {
     return curr
   }
@@ -205,7 +205,7 @@ export const updateConservatively = (prev: any, curr: any) => {
 }
 
 // Specialized deep-equal function.
-export const deq = (a: any, b: any) => {
+const deq = (a: any, b: any) => {
   if (a === b) return true
   if (typeof a !== typeof b) return false
   switch (typeof a) {

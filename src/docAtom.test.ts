@@ -1,4 +1,4 @@
-import {CREATE_TS, MODIFY_TS, testable} from './firestoreAtom'
+import {CREATE_TS, MODIFY_TS, testable} from './docAtom'
 import firebase from 'firebase/app'
 import 'firebase/firestore'
 

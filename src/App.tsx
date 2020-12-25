@@ -5,64 +5,51 @@ import './App.css';
 import firebase from "firebase/app";
 import 'firebase/firestore'
 import {useAtomValue, useUpdateAtom} from "jotai/utils.cjs";
-import {firestoreAtom, Subscriber, useFirestoreSubscriber} from "./firestoreAtom";
+import {docAtom, Subscriber, useDocSubscriber} from "./docAtom";
+import {focusAtom} from 'jotai/optics'
 
 type User = firebase.User;
 const uid = 'VRf7soDS0BQ6praLnktgJfD5CVa2'
 
-type PageType = {
+type UserInfo = {
   Name: {
     First: string
     Last: string
   }
+  Age: number
 }
 
-function isPageType(x: any): x is PageType {
+function isPageType(x: any): x is UserInfo {
   return x.hasOwnProperty('Name')
       && x.Name.hasOwnProperty('First') && typeof x.Name.First === 'string'
       && x.Name.hasOwnProperty('Last') && typeof x.Name.Last === 'string'
+      && x.hasOwnProperty('Age') && typeof x.Age === 'number'
 }
 
 // userInfoAtom will be suspended until the page is read.
 // userInfoUpdater is a function that can be used to subscribe
 // to the specified collection
 const [userInfoAtom, userSubscriber] =
-    firestoreAtom<PageType>(db.collection('Users').doc(uid), {typeGuard: isPageType})
+    docAtom<UserInfo>(db.collection('Users').doc(uid), {typeGuard: isPageType})
 
-const [xInfoAtom, xInfoSubscriber] =
-    firestoreAtom<PageType>(db.collection('Users').doc('foo'),
-        {fallback: {Name: {First: 'Fred', Last: 'Flintstome'}}}
-    )
+const firstNameAtom = focusAtom(userInfoAtom, o => o.prop('Name').prop('First'))
+const lastNameAtom = focusAtom(userInfoAtom, o => o.prop('Name').prop('Last'))
+const ageAtom = focusAtom(userInfoAtom, o => o.prop('Age'))
 
 function App() {
   return (
       <Provider>
-        <Suspense fallback={<div>Loading...</div>}>
+        <Suspense fallback={<div>Outer suspense...</div>}>
           <div className="App">
             <Auth/>
             <SubscribeToPage subscriber={userSubscriber}/>
-            <SubscribeToPage subscriber={xInfoSubscriber}/>
-            <Suspense fallback={<div>Reader loading...</div>}>
-              <Reader/>
-            </Suspense>
-            <Suspense fallback={<div>ReaderWriterLoading...</div>}>
-              <ReaderWriter/>
-            </Suspense>
-            <Suspense fallback={<div>PureWriter loading...</div>}>
-              <PureWriter/>
-            </Suspense>
-            <Suspense fallback={<div>Fred loading...</div>}>
-              <Fred/>
-            </Suspense>
+            <FirstName/>
+            <LastName/>
+            <Age/>
           </div>
         </Suspense>
       </Provider>
   );
-}
-
-const Fred = () => {
-  const info = useAtomValue(xInfoAtom)
-  return <div>{JSON.stringify(info)}</div>
 }
 
 const Auth = () => {
@@ -73,33 +60,31 @@ const Auth = () => {
   return <div>Current user: {currentUser?.uid}</div>
 }
 
-const Reader = () => {
-  const value = useAtomValue(userInfoAtom)
-  return <div>json: {JSON.stringify(value)}</div>
-}
-
-const ReaderWriter = () => {
-  const [value, setValue] = useAtom(userInfoAtom)
-  const handleClick = () => setValue({
-    Name: {
-      First: value.Name.First,
-      Last: "f" + value.Name.Last,
-    },
-  })
+const FirstName = () => {
+  const firstName = useAtomValue(firstNameAtom)
   return (
-      <>
-        <div>{value.Name.First}</div>
-        <button onClick={handleClick}>+</button>
-      </>
+      <Suspense fallback={<div>Loading first name</div>}>
+        First name: {firstName}
+      </Suspense>
   )
 }
 
-const PureWriter = () => {
-  const updateLastName = useUpdateAtom(userInfoAtom)
-  const handleClick = () => {
-    updateLastName(v => ({Name: {First: v.Name.First, Last: "p" + v.Name.Last}}))
-  }
-  return <button onClick={handleClick}>Add a p</button>
+const LastName = () => {
+  const lastName = useAtomValue(lastNameAtom)
+  return (
+      <Suspense fallback={<div>Loading first name</div>}>
+        Last name: {lastName}
+      </Suspense>
+  )
+}
+
+const Age = () => {
+  const [age, setAge] = useAtom(ageAtom)
+  return (
+      <Suspense fallback={<div>Loading</div>}>
+        <button onClick={() => setAge(age => age+1)}>{age}</button>
+      </Suspense>
+  )
 }
 
 type SubscriberType = {
@@ -107,7 +92,7 @@ type SubscriberType = {
 }
 
 const SubscribeToPage = ({subscriber}: SubscriberType) => {
-  useFirestoreSubscriber(subscriber)
+  useDocSubscriber(subscriber)
   return null
 }
 
