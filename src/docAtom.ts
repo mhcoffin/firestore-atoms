@@ -4,6 +4,7 @@ import 'firebase/firestore'
 import {Getter, SetStateAction, Setter} from "jotai/core/types";
 import {useAtomCallback} from "jotai/utils.cjs";
 import {useEffect} from "react";
+import {db} from "./fs";
 
 type DocumentReference = firebase.firestore.DocumentReference
 
@@ -13,11 +14,44 @@ export const CREATE_TS = new firebase.firestore.Timestamp(1, 1)
 /** Use this Timestamp to set a server timestamp on every write. */
 export const MODIFY_TS = new firebase.firestore.Timestamp(1, 2)
 
+export type RequiredTimestamps = {
+  CreateTime: firebase.firestore.Timestamp,
+  ModifyTime: firebase.firestore.Timestamp,
+}
+
+/**
+ * Options for docAtom:
+ *
+ * If typeGuard is specified, it is applied to values read from
+ * firestore. If the type guard returns false, an error is thrown. If no
+ * typeGuard is specified, pages from firestore are coerced to type
+ * T without any checking. If you do that, you're on your own.
+ *
+ * If fallback is specified, attempting to read a doc that does not
+ * exist will write the fallback value to firestore and then track changes.
+ * If no fallback is specified, trying to read a doc that does not exist
+ * throws an Error.
+ *
+ * If useTransactions is set, each update to this atom will be done in a
+ * transaction. The main use of this is to make atomic updates (e.g., to update
+ * an array). It also protects against concurrent modification by another user
+ * but since the atom maintains a subscription to the page, currently modification
+ * should be very rare.
+ */
+export type Options<T extends RequiredTimestamps> = {
+  /** Type guard applied to pages read from firestore. */
+  typeGuard?: (x: any) => boolean,
+  /** Value to be written to firestore if a document ref does not exist, */
+  fallback?: T,
+  /** Do each update in a transaction */
+  useTransactions?: boolean,
+}
+
 /**
  * Creates an atom that mirrors the specified firestore document,
  * as well as a subscriber function that can be invoked to subscribe to
  * firestore and keep the atom up to date. The intent is that the atom
- * mirrors the value in firestore as long as the subscriber is active.
+ * exactly mirrors the firestore value as long as the subscriber is active.
  *
  * The returned atom will initially be suspended for both read and write
  * until the subscriber fires. When the subscriber has retrieved the page
@@ -44,32 +78,59 @@ export const MODIFY_TS = new firebase.firestore.Timestamp(1, 2)
  * is updated while maintaining as much of the old structure as possible.
  * This helps eliminate unnecessary re-rendering.
  *
- * Options:
+ * Updates can use three special sentinel values:
  *
- * If options.typeGuard is specified, it is applied to values read from
- * firestore. If the type guard returns false, an error is thrown. If no
- * typeGuard is specified, pages from firestore are simply coerced to type
- * T without any checking and you're on your own.
+ *  CREATE_TS: sets a server timestamp, but only the first time it is used.
+ *  MODIFY_TS: sets a server timestamp every time it is used.
+ *  undefined: delete the item from firestore.
  *
- * If options.fallback is specified, attempting to read a doc that does not
- * exist will write the fallback value to firestore. If no fallback is
- * specified, trying to read a doc that does not exist causes an error to
- * be thrown.
- *
- * @param doc
- * @param options
+ * @param doc DocumentReference of the document this atom tracks
+ * @param options See above.
  */
-export const docAtom = <T>(
+export const docAtom = <T extends RequiredTimestamps>(
     doc: DocumentReference,
-    options: {
-      typeGuard?: (x: any) => boolean,
-      fallback?: T,
-    } = {},
+    options: Options<T> = {},
 ): [PrimitiveAtom<T>, Subscriber] => {
   const pending = Symbol()
   const store = atom<T | typeof pending>(pending)
-  // Queue of pending readers and writers.
-  const waiters: (() => void)[] = []
+  const waiters: (() => void)[] = [] // Pending readers and writers
+
+  // Update firestore or throw an error
+  const updateFirestoreNoTransaction = async (get: Getter, update: SetStateAction<T>) => {
+    const base = get(store) as T
+    const value = update instanceof Function ? update(base) : update
+    try {
+      await doc.update(firestoreDiff(base, value))
+    } catch (err) {
+      throw new Error(`failed to update page: ${err.message}`)
+    }
+  }
+
+  // Update firestore in a transaction, or throw an error.
+  const updateFirestoreInTransaction = async (get: Getter, update: SetStateAction<T>) => {
+    const base = get(store) as T
+    const newValue = update instanceof Function ? update(base) : update
+    try {
+      await db.runTransaction(async (transaction) => {
+        const snap = await transaction.get(doc)
+        if (!snap.exists) {
+          throw new Error(`document no longer exists!?`)
+        }
+        const currValue = snap.data({serverTimestamps: 'estimate'}) as T
+        if (currValue.ModifyTime.valueOf() >= base.ModifyTime.valueOf()) {
+          // This should be extremely rare, given that we have a subscription,
+          throw new Error(`concurrent modification`)
+        }
+        return transaction.update(doc, firestoreDiff(currValue, newValue))
+      })
+    } catch (err) {
+      throw new Error(`failed to update page: ${err.message}`)
+    }
+  }
+
+  const updateFirestore = options.useTransactions
+      ? updateFirestoreInTransaction
+      : updateFirestoreNoTransaction
 
   const fsAtom: WritableAtom<T, SetStateAction<T>> = atom(
       (get) => {
@@ -90,24 +151,13 @@ export const docAtom = <T>(
         if (prev === pending) {
           return new Promise(resolve => {
             const setter = () => {
-              const base = get(store) as T
-              const value = update instanceof Function ? update(base) : update
-              try {
-                doc.update(firestoreDiff(base, value))
-              } catch (err) {
-                throw new Error(`failed to update page: ${err.message}`)
-              }
+              updateFirestore(get, update as T)
               resolve()
             }
             waiters.push(setter)
           })
         } else {
-          const value = update instanceof Function ? update(prev) : update
-          try {
-            await doc.set(value)
-          } catch (err) {
-            throw new Error(`failed to update page: ${err.message}`)
-          }
+          await updateFirestore(get, update)
         }
       }
   )
@@ -118,7 +168,7 @@ export const docAtom = <T>(
         if (options.fallback) {
           try {
             await doc.set(options.fallback)
-            return
+            return // onSnapshot will fire again with contents of fallback
           } catch (err) {
             throw new Error(`failed to write fallback value to firestore: ${err.message}`)
           }
@@ -232,17 +282,22 @@ const deq = (a: any, b: any) => {
 
 /**
  * Creates a diff object that can be applied to a firestore page via update().
- * The resulting diff will update the page to match 'after', except for two
- * special timestamps that can be included in 'after':
+ * The resulting diff will update the page to match 'after', except for a few
+ * special-purpose sentinels:
  *
  * - If 'after' contains an entry with value CREATE_TS, this field will be
- * omitted in the diff if 'before' already contains a timestamp in the parallel
- * entry. Thus CREATE_TS will create a timestamp the first time it's used,
+ * omitted in the diff if 'before' already contains a timestamp in the same
+ * place. Thus CREATE_TS will create a server timestamp the first time it's used,
  * but not change an existing timestamp.
  *
  * - If 'after' contains an entry with value MODIFY_TS, the diff will contain
  * FieldValue.serverTimestamp() so that the timestamp is updated to server time
  * on every write.
+ *
+ * - If "after" contains an undefined value, the diff will contains
+ * FieldValue.delete() so that the field of that name is deleted.
+ *
+ * None of these sentinels will appear in atom values.
  *
  * @param before
  * @param after
@@ -257,7 +312,7 @@ const recFirestoreDiff = (a: any, b: any, path: string[], diff: Map<string, any>
   switch (typ(b)) {
     case 'error':
       throw new Error(`illegal firebase object at ${path.join('.')}`)
-    case 'leaf':
+    case 'simple':
       if (a !== b) {
         diff.set(path.join('.'), b)
       }
@@ -284,9 +339,9 @@ const recFirestoreDiff = (a: any, b: any, path: string[], diff: Map<string, any>
       return
     case 'object':
       switch (typ(a)) {
-        case 'leaf':
+        case 'simple':
         case 'timestamp':
-        case 'createTime':  // probably cannot occur
+        case 'createTime':  // should not occur
         case 'modifyTime':  // ditto
         case 'error':       // ditto
           diff.set(path.join('.'), b)
@@ -308,13 +363,24 @@ const recFirestoreDiff = (a: any, b: any, path: string[], diff: Map<string, any>
   }
 }
 
+/**
+ * Returns a special purpose type for an object: one of
+ *   "simple"     simple object that can be compared with ===
+ *   "undefined"
+ *   "error"      something that can't be serialized and stored in firebase
+ *   "createTime" sentinel value for creating a server-side creation time
+ *   "modifyTime" sentinel value for creating a server-side last-modified time
+ *   "timestamp"  regular timestamp, written as is
+ *   "object"     anything else
+ * @param obj
+ */
 const typ = (obj: any) => {
   switch (typeof obj) {
     case 'number':
     case 'string':
     case 'boolean':
     case 'bigint':
-      return 'leaf'
+      return 'simple'
     case 'undefined':
       return 'undefined'
     case 'symbol':

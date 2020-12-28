@@ -12,6 +12,8 @@ type User = firebase.User;
 const uid = 'VRf7soDS0BQ6praLnktgJfD5CVa2'
 
 type UserInfo = {
+  CreateTime: firebase.firestore.Timestamp
+  ModifyTime: firebase.firestore.Timestamp
   Name: {
     First: string
     Last: string
@@ -26,9 +28,6 @@ function isPageType(x: any): x is UserInfo {
       && x.hasOwnProperty('Age') && typeof x.Age === 'number'
 }
 
-// userInfoAtom will be suspended until the page is read.
-// userInfoUpdater is a function that can be used to subscribe
-// to the specified collection
 const [userInfoAtom, userSubscriber] =
     docAtom<UserInfo>(db.collection('Users').doc(uid), {typeGuard: isPageType})
 
@@ -82,7 +81,9 @@ const Age = () => {
   const [age, setAge] = useAtom(ageAtom)
   return (
       <Suspense fallback={<div>Loading</div>}>
-        <button onClick={() => setAge(age => age+1)}>{age}</button>
+        <div>
+          <button onClick={() => setAge(age => age + 1)}>{age}</button>
+        </div>
       </Suspense>
   )
 }
