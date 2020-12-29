@@ -104,7 +104,7 @@ export const docAtom = <T extends RequiredTimestamps>(
   const store = atom<T | typeof pending>(pending)
   const waiters: (() => void)[] = [] // Pending readers and writers
 
-  // Update firestore or throw an error
+  // Update firestore or throw an error.
   const updateFirestoreNoTransaction = async (get: Getter, update: SetStateAction<T>) => {
     const base = get(store) as T
     const value = update instanceof Function ? update(base) : update
