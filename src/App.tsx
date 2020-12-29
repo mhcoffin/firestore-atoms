@@ -81,9 +81,7 @@ const Age = () => {
   const [age, setAge] = useAtom(ageAtom)
   return (
       <Suspense fallback={<div>Loading</div>}>
-        <div>
-          <button onClick={() => setAge(age => age + 1)}>{age}</button>
-        </div>
+        <button onClick={() => setAge(age => age + 1)}>{age}</button>
       </Suspense>
   )
 }

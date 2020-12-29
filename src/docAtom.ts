@@ -8,31 +8,36 @@ import {db} from "./fs";
 
 type DocumentReference = firebase.firestore.DocumentReference
 
-/** Use this Timestamp to set a server timestamp exactly once and never update */
+/**
+ * Use this [Timestamp]{@link firebase.firestore.Timestamp} to set a server timestamp
+ * exactly once and never update it.
+ */
 export const CREATE_TS = new firebase.firestore.Timestamp(1, 1)
 
-/** Use this Timestamp to set a server timestamp on every write. */
+/**
+ * Use this [Timestamp]{@link firebase.firestore.Timestamp} to set a server timestamp
+ * on every write.
+ */
 export const MODIFY_TS = new firebase.firestore.Timestamp(1, 2)
 
 export type RequiredTimestamps = {
-  CreateTime: firebase.firestore.Timestamp,
   ModifyTime: firebase.firestore.Timestamp,
 }
 
 /**
  * Options for docAtom:
  *
- * If typeGuard is specified, it is applied to values read from
+ * If {@link typeGuard} is specified, it is applied to values read from
  * firestore. If the type guard returns false, an error is thrown. If no
  * typeGuard is specified, pages from firestore are coerced to type
  * T without any checking. If you do that, you're on your own.
  *
- * If fallback is specified, attempting to read a doc that does not
+ * If {@link fallback} is specified, attempting to read a doc that does not
  * exist will write the fallback value to firestore and then track changes.
  * If no fallback is specified, trying to read a doc that does not exist
  * throws an Error.
  *
- * If useTransactions is set, each update to this atom will be done in a
+ * If {@link useTransactions} is set, each update to this atom will be done in a
  * transaction. The main use of this is to make atomic updates (e.g., to update
  * an array). It also protects against concurrent modification by another user
  * but since the atom maintains a subscription to the page, currently modification
@@ -63,29 +68,33 @@ export type Options<T extends RequiredTimestamps> = {
  *
  * The returned subscriber should be activated in some react component via
  * the hook:
- *
- *   useFirestoreSubscriber(subscriber)
- *
+ * ```
+ *   useDocSubscriber(subscriber)
+ * ```
  * The subscription will be established when the component is mounted and
  * cancelled when the component is dismounted. The subscription must be
  * established in a component that does not actually use the value of atom.
  * If you try to use the atom value from the same react component that
  * subscribes to it, it will suspend before it gets a chance to subscribe
- * and you will be stuck on the Suspense fallback page.
+ * and you will be stuck on the {@link Suspense} fallback page.
  *
  * The subscriber tries to be smart about updating the atom: when a new value
  * is set, either because of a remote update or a local one, the atom value
  * is updated while maintaining as much of the old structure as possible.
  * This helps eliminate unnecessary re-rendering.
  *
- * Updates can use three special sentinel values:
+ * Updates can embed three sentinels:
  *
- *  CREATE_TS: sets a server timestamp, but only the first time it is used.
- *  MODIFY_TS: sets a server timestamp every time it is used.
+ *  {@link CREATE_TS}: sets a server timestamp, but only if that field does not
+ *  exist or does not currently contain a timestamp. I.e., a good place for it
+ *  is in {@link Options#fallback}.
+ *
+ *  {@link MODIFY_TS}: sets a server timestamp every time it is used.
+ *
  *  undefined: delete the item from firestore.
  *
- * @param doc DocumentReference of the document this atom tracks
- * @param options See above.
+ * @param doc {@link DocumentReference} of the document this atom subscribes to.
+ * @param options See {@link Options}
  */
 export const docAtom = <T extends RequiredTimestamps>(
     doc: DocumentReference,
@@ -199,9 +208,7 @@ export const docAtom = <T extends RequiredTimestamps>(
 export type Subscriber = (get: Getter, set: Setter) => () => void
 
 /**
- * Hook to use a Subscriber returned from docAtom. Don't use the value
- * of the atom in the same component or you will be stuck on the fallback
- * page forever.
+ * Hook to use a {@link Subscriber} returned from {@link docAtom}.
  *
  * @param subscriber returned from docAtom()
  */
@@ -294,7 +301,7 @@ const deq = (a: any, b: any) => {
  * FieldValue.serverTimestamp() so that the timestamp is updated to server time
  * on every write.
  *
- * - If "after" contains an undefined value, the diff will contains
+ * - If "after" contains an undefined value, the diff will contain
  * FieldValue.delete() so that the field of that name is deleted.
  *
  * None of these sentinels will appear in atom values.
