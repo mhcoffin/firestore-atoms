@@ -1,12 +1,14 @@
 import {atom, WritableAtom} from 'jotai'
 import {SetStateAction} from 'jotai/core/types'
 
-// A suspenseAtom begins life suspended (as an unresolved Promise) and remains suspended
-// until it is set. After it has been set, it acts like a regular writable atom.
-//
-// The init parameter is only used only if the first call to 'set' uses a setter function
-// rather than a value. If you are sure that you won't initialize with a setter function,
-// you don't need to supply init.
+/**
+ * A suspense atom begins its life suspended and remains that way until it is set (in
+ * useEffect, presumably). After it has been set, it functions as an ordinary writable
+ * atom.
+ *
+ * @param init Used only if the first call to 'set' uses a setter function rather than
+ * a value.
+ */
 export const suspenseAtom = <T>(init?: T): WritableAtom<T, SetStateAction<T>> => {
   type Resolve = (v: T | PromiseLike<T>) => void
   const pending = Symbol()
@@ -23,6 +25,7 @@ export const suspenseAtom = <T>(init?: T): WritableAtom<T, SetStateAction<T>> =>
         }
       },
       (get, set, update) => {
+        console.log(`setting suspenseAtom`)
         const current = get(store)
         if (current === pending) {
           if (update instanceof Function) {

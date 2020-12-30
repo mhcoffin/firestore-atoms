@@ -1,4 +1,4 @@
-import {atom, PrimitiveAtom, WritableAtom} from "jotai";
+import {Atom, atom, PrimitiveAtom, WritableAtom} from "jotai";
 import firebase from 'firebase/app'
 import 'firebase/firestore'
 import {Getter, SetStateAction, Setter} from "jotai/core/types";
@@ -105,7 +105,7 @@ export const docAtom = <T extends RequiredTimestamps>(
   const waiters: (() => void)[] = [] // Pending readers and writers
 
   // Update firestore or throw an error.
-  const updateFirestoreNoTransaction = async (get: Getter, update: SetStateAction<T>) => {
+  const updateFirestoreNoTransaction = async (doc: DocumentReference, get: Getter, update: SetStateAction<T>) => {
     const base = get(store) as T
     const value = update instanceof Function ? update(base) : update
     try {
@@ -116,7 +116,7 @@ export const docAtom = <T extends RequiredTimestamps>(
   }
 
   // Update firestore in a transaction, or throw an error.
-  const updateFirestoreInTransaction = async (get: Getter, update: SetStateAction<T>) => {
+  const updateFirestoreInTransaction = async (doc: DocumentReference, get: Getter, update: SetStateAction<T>) => {
     const base = get(store) as T
     const newValue = update instanceof Function ? update(base) : update
     try {
@@ -160,18 +160,19 @@ export const docAtom = <T extends RequiredTimestamps>(
         if (prev === pending) {
           return new Promise(resolve => {
             const setter = () => {
-              updateFirestore(get, update as T)
+              updateFirestore(doc, get, update as T)
               resolve()
             }
             waiters.push(setter)
           })
         } else {
-          await updateFirestore(get, update)
+          await updateFirestore(doc, get, update)
         }
       }
   )
 
   const subscriber = (get: Getter, set: Setter) => {
+    console.log(`doc: ${doc}`)
     const unsubscribe = doc.onSnapshot(async snap => {
       if (!snap.exists) {
         if (options.fallback) {

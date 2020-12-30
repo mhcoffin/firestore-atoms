@@ -5,8 +5,10 @@ import './App.css';
 import firebase from "firebase/app";
 import 'firebase/firestore'
 import {useAtomValue, useUpdateAtom} from "jotai/utils.cjs";
-import {docAtom, Subscriber, useDocSubscriber} from "./docAtom";
+import {CREATE_TS, docAtom, MODIFY_TS, Subscriber, useDocSubscriber} from "./docAtom";
 import {focusAtom} from 'jotai/optics'
+
+type DocumentReference = firebase.firestore.DocumentReference;
 
 type User = firebase.User;
 const uid = 'VRf7soDS0BQ6praLnktgJfD5CVa2'
@@ -21,6 +23,16 @@ type UserInfo = {
   Age: number
 }
 
+const fallback = {
+  CreateTime: CREATE_TS,
+  ModifyTime: MODIFY_TS,
+  Name: {
+    First: "Mike",
+    Last: "Coffin"
+  },
+  Age: 23
+}
+
 function isPageType(x: any): x is UserInfo {
   return x.hasOwnProperty('Name')
       && x.Name.hasOwnProperty('First') && typeof x.Name.First === 'string'
@@ -28,8 +40,10 @@ function isPageType(x: any): x is UserInfo {
       && x.hasOwnProperty('Age') && typeof x.Age === 'number'
 }
 
-const [userInfoAtom, userSubscriber] =
-    docAtom<UserInfo>(db.collection('Users').doc(uid), {typeGuard: isPageType})
+const [userInfoAtom, userInfoSubscriber] =
+    docAtom<UserInfo>(
+        db.collection('Users').doc(uid),
+        {typeGuard: isPageType, fallback: fallback})
 
 const firstNameAtom = focusAtom(userInfoAtom, o => o.prop('Name').prop('First'))
 const lastNameAtom = focusAtom(userInfoAtom, o => o.prop('Name').prop('Last'))
@@ -39,13 +53,7 @@ function App() {
   return (
       <Provider>
         <Suspense fallback={<div>Outer suspense...</div>}>
-          <div className="App">
-            <Auth/>
-            <SubscribeToPage subscriber={userSubscriber}/>
-            <FirstName/>
-            <LastName/>
-            <Age/>
-          </div>
+          <UserPage uid={uid}/>
         </Suspense>
       </Provider>
   );
@@ -57,6 +65,18 @@ const Auth = () => {
     auth.onAuthStateChanged(user => setCurrentUser(user))
   })
   return <div>Current user: {currentUser?.uid}</div>
+}
+
+const UserPage = ({uid}: {uid: string}) => {
+  return (
+      <div>
+        <Auth/>
+        <SubscribeToPage subscriber={userInfoSubscriber}/>
+        <FirstName/>
+        <LastName/>
+        <Age/>
+      </div>
+  )
 }
 
 const FirstName = () => {
