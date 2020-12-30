@@ -53,23 +53,22 @@ export type Options<T extends RequiredTimestamps> = {
 }
 
 /**
- * Creates an atom that mirrors the specified firestore document,
- * as well as a subscriber function that can be invoked to subscribe to
- * firestore and keep the atom up to date. The intent is that the atom
+ * Creates an atom that mirrors a firestore document as well as a subscriber
+ * function that can be invoked to specify the DocumentReference and subscribe
+ * to firestore to keep the atom up to date. The intent is that the atom
  * exactly mirrors the firestore value as long as the subscriber is active.
  *
  * The returned atom will initially be suspended for both read and write
- * until the subscriber fires. When the subscriber has retrieved the page
- * from firestore for the first time, the promise resolves. Thereafter,
- * the atom acts like a normal PrimitiveAtom<T>. Reading from it will
+ * until the subscriber is runs and the page is retrieved for the first time.
+ * Thereafter the atom acts like a normal PrimitiveAtom<T>. Reading from it will
  * return the current value of the firestore document. Updating it will
  * modify the firestore document (suspending briefly). Remote updates to
- * the atom page will cause the atom to update.
+ * the atom page will cause the atom to update as well.
  *
  * The returned subscriber should be activated in some react component via
  * the hook:
  * ```
- *   useDocSubscriber(subscriber)
+ *   useDocSubscriber(subscriber(documentReference))
  * ```
  * The subscription will be established when the component is mounted and
  * cancelled when the component is dismounted. The subscription must be
@@ -93,14 +92,14 @@ export type Options<T extends RequiredTimestamps> = {
  *
  *  undefined: delete the item from firestore.
  *
- * @param doc {@link DocumentReference} of the document this atom subscribes to.
  * @param options See {@link Options}
  */
 export const docAtom = <T extends RequiredTimestamps>(
     options: Options<T> = {},
 ): [PrimitiveAtom<T>, (doc: DocumentReference) => Subscriber] => {
-  const pending = Symbol()
+  // The document we are currently subscribed to, or null.
   const docAtom = atom<DocumentReference|null>(null)
+  const pending = Symbol()
   const store = atom<T|typeof pending>(pending)
   const waiters: (() => void)[] = [] // Pending readers and writers
 
@@ -199,8 +198,9 @@ export const docAtom = <T extends RequiredTimestamps>(
       }
     })
     return () => {
-      unsubscribe()
+      set(docAtom, null)
       set(store, pending)
+      unsubscribe()
     }
   }
   return [fsAtom, subscriber]

@@ -4,7 +4,7 @@ import {auth, db} from './fs'
 import './App.css';
 import firebase from "firebase/app";
 import 'firebase/firestore'
-import {useAtomValue} from "jotai/utils.cjs";
+import {useAtomValue, useUpdateAtom} from "jotai/utils.cjs";
 import {CREATE_TS, docAtom, MODIFY_TS, useDocSubscriber} from "./docAtom";
 import {focusAtom} from 'jotai/optics'
 
@@ -44,6 +44,7 @@ const [userInfoAtom, userInfoSubscriber] = docAtom<UserInfo>(
 const firstNameAtom = focusAtom(userInfoAtom, o => o.prop('Name').prop('First'))
 const lastNameAtom = focusAtom(userInfoAtom, o => o.prop('Name').prop('Last'))
 const ageAtom = focusAtom(userInfoAtom, o => o.prop('Age'))
+const nameAtom = focusAtom(userInfoAtom, o => o.prop('Name'))
 
 function App() {
   return (
@@ -68,10 +69,24 @@ const UserPage = ({uid}: { uid: string }) => {
   return (
       <div>
         <Auth/>
+        <Payload/>
         <FirstName/>
         <LastName/>
+        <FullName/>
         <Age/>
+        <Ager/>
       </div>
+  )
+}
+
+const Payload = () => {
+  const json = useAtomValue(userInfoAtom)
+  return (
+      <Suspense fallback={<div>loading</div>}>
+        <div>
+          {JSON.stringify(json)}
+        </div>
+      </Suspense>
   )
 }
 
@@ -79,7 +94,9 @@ const FirstName = () => {
   const firstName = useAtomValue(firstNameAtom)
   return (
       <Suspense fallback={<div>Loading first name</div>}>
-        First name: {firstName}
+        <div>
+          First name: {firstName}
+        </div>
       </Suspense>
   )
 }
@@ -88,7 +105,20 @@ const LastName = () => {
   const lastName = useAtomValue(lastNameAtom)
   return (
       <Suspense fallback={<div>Loading first name</div>}>
-        Last name: {lastName}
+        <div>
+          Last name: {lastName}
+        </div>
+      </Suspense>
+  )
+}
+
+const FullName = () => {
+  const name = useAtomValue(nameAtom)
+  return (
+      <Suspense fallback={<div>loading</div>}>
+        <div>
+          {`${name.First} ${name.Last}`}
+        </div>
       </Suspense>
   )
 }
@@ -97,7 +127,20 @@ const Age = () => {
   const [age, setAge] = useAtom(ageAtom)
   return (
       <Suspense fallback={<div>Loading</div>}>
-        <button onClick={() => setAge(age => age + 1)}>{age}</button>
+        <div>
+          <button onClick={() => setAge(age + 1)}>{age}</button>
+        </div>
+      </Suspense>
+  )
+}
+
+const Ager = () => {
+  const setAge = useUpdateAtom(ageAtom)
+  return (
+      <Suspense fallback={<div>loading</div>}>
+        <div>
+          <button onClick={() => setAge(age => age + 1)}>+1</button>
+        </div>
       </Suspense>
   )
 }
