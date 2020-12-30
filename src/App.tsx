@@ -4,11 +4,9 @@ import {auth, db} from './fs'
 import './App.css';
 import firebase from "firebase/app";
 import 'firebase/firestore'
-import {useAtomValue, useUpdateAtom} from "jotai/utils.cjs";
-import {CREATE_TS, docAtom, MODIFY_TS, Subscriber, useDocSubscriber} from "./docAtom";
+import {useAtomValue} from "jotai/utils.cjs";
+import {CREATE_TS, docAtom, MODIFY_TS, useDocSubscriber} from "./docAtom";
 import {focusAtom} from 'jotai/optics'
-
-type DocumentReference = firebase.firestore.DocumentReference;
 
 type User = firebase.User;
 const uid = 'VRf7soDS0BQ6praLnktgJfD5CVa2'
@@ -40,10 +38,8 @@ function isPageType(x: any): x is UserInfo {
       && x.hasOwnProperty('Age') && typeof x.Age === 'number'
 }
 
-const [userInfoAtom, userInfoSubscriber] =
-    docAtom<UserInfo>(
-        db.collection('Users').doc(uid),
-        {typeGuard: isPageType, fallback: fallback})
+const [userInfoAtom, userInfoSubscriber] = docAtom<UserInfo>(
+    {typeGuard: isPageType, fallback: fallback})
 
 const firstNameAtom = focusAtom(userInfoAtom, o => o.prop('Name').prop('First'))
 const lastNameAtom = focusAtom(userInfoAtom, o => o.prop('Name').prop('Last'))
@@ -67,11 +63,11 @@ const Auth = () => {
   return <div>Current user: {currentUser?.uid}</div>
 }
 
-const UserPage = ({uid}: {uid: string}) => {
+const UserPage = ({uid}: { uid: string }) => {
+  useDocSubscriber(userInfoSubscriber(db.collection('Users').doc(uid)))
   return (
       <div>
         <Auth/>
-        <SubscribeToPage subscriber={userInfoSubscriber}/>
         <FirstName/>
         <LastName/>
         <Age/>
@@ -104,15 +100,6 @@ const Age = () => {
         <button onClick={() => setAge(age => age + 1)}>{age}</button>
       </Suspense>
   )
-}
-
-type SubscriberType = {
-  subscriber: Subscriber
-}
-
-const SubscribeToPage = ({subscriber}: SubscriberType) => {
-  useDocSubscriber(subscriber)
-  return null
 }
 
 export default App;

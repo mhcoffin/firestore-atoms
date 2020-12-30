@@ -1,4 +1,4 @@
-import {Atom, atom, PrimitiveAtom, WritableAtom} from "jotai";
+import {atom, PrimitiveAtom, WritableAtom} from "jotai";
 import firebase from 'firebase/app'
 import 'firebase/firestore'
 import {Getter, SetStateAction, Setter} from "jotai/core/types";
@@ -97,11 +97,11 @@ export type Options<T extends RequiredTimestamps> = {
  * @param options See {@link Options}
  */
 export const docAtom = <T extends RequiredTimestamps>(
-    doc: DocumentReference,
     options: Options<T> = {},
-): [PrimitiveAtom<T>, Subscriber] => {
+): [PrimitiveAtom<T>, (doc: DocumentReference) => Subscriber] => {
   const pending = Symbol()
-  const store = atom<T | typeof pending>(pending)
+  const docAtom = atom<DocumentReference|null>(null)
+  const store = atom<T|typeof pending>(pending)
   const waiters: (() => void)[] = [] // Pending readers and writers
 
   // Update firestore or throw an error.
@@ -160,19 +160,19 @@ export const docAtom = <T extends RequiredTimestamps>(
         if (prev === pending) {
           return new Promise(resolve => {
             const setter = () => {
-              updateFirestore(doc, get, update as T)
+              updateFirestore(get(docAtom) as DocumentReference, get, update as T)
               resolve()
             }
             waiters.push(setter)
           })
         } else {
-          await updateFirestore(doc, get, update)
+          await updateFirestore(get(docAtom) as DocumentReference, get, update)
         }
       }
   )
 
-  const subscriber = (get: Getter, set: Setter) => {
-    console.log(`doc: ${doc}`)
+  const subscriber = (doc: DocumentReference) => (get: Getter, set: Setter) => {
+    set(docAtom, doc)
     const unsubscribe = doc.onSnapshot(async snap => {
       if (!snap.exists) {
         if (options.fallback) {
