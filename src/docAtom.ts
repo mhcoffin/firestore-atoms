@@ -1,10 +1,10 @@
-import {atom, PrimitiveAtom, WritableAtom} from "jotai";
+import {atom, PrimitiveAtom, WritableAtom} from "jotai"
 import firebase from 'firebase/app'
 import 'firebase/firestore'
-import {Getter, SetStateAction, Setter} from "jotai/core/types";
-import {useAtomCallback} from "jotai/utils.cjs";
-import {useEffect} from "react";
-import {db} from "./fs";
+import {Getter, SetStateAction, Setter} from "jotai/core/types"
+import {useAtomCallback} from "jotai/utils.cjs"
+import {useEffect} from "react"
+import {db} from "./fs"
 
 type DocumentReference = firebase.firestore.DocumentReference
 
@@ -40,7 +40,7 @@ export type RequiredTimestamps = {
  * If {@link useTransactions} is set, each update to this atom will be done in a
  * transaction. The main use of this is to make atomic updates (e.g., to update
  * an array). It also protects against concurrent modification by another user
- * but since the atom maintains a subscription to the page, currently modification
+ * but since the atom maintains a subscription to the page, current modification
  * should be very rare.
  */
 export type Options<T extends RequiredTimestamps> = {
@@ -53,10 +53,9 @@ export type Options<T extends RequiredTimestamps> = {
 }
 
 /**
- * Creates an atom that mirrors a firestore document as well as a subscriber
- * function that can be invoked to specify the DocumentReference and subscribe
- * to firestore to keep the atom up to date. The intent is that the atom
- * exactly mirrors the firestore value as long as the subscriber is active.
+ * Creates an atom that mirrors a firestore document, as well as a subscriber
+ * function that can be invoked to subscribe to a document. The intent is that
+ * the atom will mirror the firestore value as long as the subscriber is active.
  *
  * The returned atom will initially be suspended for both read and write
  * until the subscriber is runs and the page is retrieved for the first time.
@@ -84,9 +83,8 @@ export type Options<T extends RequiredTimestamps> = {
  *
  * Updates can embed three sentinels:
  *
- *  {@link CREATE_TS}: sets a server timestamp, but only if that field does not
- *  exist or does not currently contain a timestamp. I.e., a good place for it
- *  is in {@link Options#fallback}.
+ *  {@link CREATE_TS}: sets a field to the server timestamp, unless the field already
+ *  contains a timestamp.
  *
  *  {@link MODIFY_TS}: sets a server timestamp every time it is used.
  *
@@ -95,12 +93,12 @@ export type Options<T extends RequiredTimestamps> = {
  * @param options See {@link Options}
  */
 export const docAtom = <T extends RequiredTimestamps>(
-    options: Options<T> = {},
+  options: Options<T> = {}
 ): [PrimitiveAtom<T>, (doc: DocumentReference) => Subscriber] => {
   // The document we are currently subscribed to, or null.
-  const docAtom = atom<DocumentReference|null>(null)
+  const docAtom = atom<DocumentReference | null>(null)
   const pending = Symbol()
-  const store = atom<T|typeof pending>(pending)
+  const store = atom<T | typeof pending>(pending)
   const waiters: (() => void)[] = [] // Pending readers and writers
 
   // Update firestore or throw an error.
@@ -137,37 +135,37 @@ export const docAtom = <T extends RequiredTimestamps>(
   }
 
   const updateFirestore = options.useTransactions
-      ? updateFirestoreInTransaction
-      : updateFirestoreNoTransaction
+    ? updateFirestoreInTransaction
+    : updateFirestoreNoTransaction
 
   const fsAtom: WritableAtom<T, SetStateAction<T>> = atom(
-      (get) => {
-        const value = get(store)
-        if (value === pending) {
-          return new Promise(resolve => {
-            const getter = () => {
-              resolve(get(store) as T)
-            }
-            waiters.push(getter)
-          })
-        } else {
-          return value
-        }
-      },
-      async (get, set, update: SetStateAction<T>) => {
-        const prev = get(store)
-        if (prev === pending) {
-          return new Promise(resolve => {
-            const setter = () => {
-              updateFirestore(get(docAtom) as DocumentReference, get, update as T)
-              resolve()
-            }
-            waiters.push(setter)
-          })
-        } else {
-          await updateFirestore(get(docAtom) as DocumentReference, get, update)
-        }
+    (get) => {
+      const value = get(store)
+      if (value === pending) {
+        return new Promise(resolve => {
+          const getter = () => {
+            resolve(get(store) as T)
+          }
+          waiters.push(getter)
+        })
+      } else {
+        return value
       }
+    },
+    async (get, set, update: SetStateAction<T>) => {
+      const prev = get(store)
+      if (prev === pending) {
+        return new Promise(resolve => {
+          const setter = () => {
+            updateFirestore(get(docAtom) as DocumentReference, get, update as T)
+            resolve()
+          }
+          waiters.push(setter)
+        })
+      } else {
+        await updateFirestore(get(docAtom) as DocumentReference, get, update)
+      }
+    }
   )
 
   const subscriber = (doc: DocumentReference) => (get: Getter, set: Setter) => {
@@ -280,7 +278,7 @@ const deq = (a: any, b: any) => {
   if (a === null || b === null) {
     return false
   }
-  if (Object.keys(a).length !== Object.keys(b).length) return false;
+  if (Object.keys(a).length !== Object.keys(b).length) return false
   for (const [key, value] of Object.entries(a)) {
     if (!b.hasOwnProperty(key)) return false
     if (!deq(value, b[key])) return false
@@ -329,7 +327,7 @@ const recFirestoreDiff = (a: any, b: any, path: string[], diff: Map<string, any>
       if (typ(a) !== 'timestamp') {
         diff.set(path.join('.'), firebase.firestore.FieldValue.serverTimestamp())
       }
-      return;
+      return
     case "modifyTime":
       diff.set(path.join('.'), firebase.firestore.FieldValue.serverTimestamp())
       return
