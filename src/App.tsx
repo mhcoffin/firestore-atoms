@@ -5,8 +5,7 @@ import './App.css'
 import firebase from "firebase/app"
 import 'firebase/firestore'
 import {useAtomValue, useSelector, useUpdateAtom} from "jotai/utils.cjs"
-import {CREATE_TS, docAtom, MODIFY_TS, useDocSubscriber} from "./docAtom"
-import {fieldAtom, sliceAtom} from './sliceAtom'
+import {CREATE_TS, docAtom, MODIFY_TS, useDocSubscriber, fieldAtom, sliceAtom} from "./docAtom"
 
 type User = firebase.User;
 const uid = 'VRf7soDS0BQ6praLnktgJfD5CVa2'
@@ -38,8 +37,7 @@ function isPageType(x: any): x is UserInfo {
     && x.hasOwnProperty('Age') && typeof x.Age === 'number'
 }
 
-const [userInfoAtom, userInfoSubscriber] = docAtom(
-  {typeGuard: isPageType, fallback: fallback})
+const [userInfoAtom, userInfoSubscriber] = docAtom({typeGuard: isPageType, fallback: fallback})
 
 const ageSliceAtom = sliceAtom(userInfoAtom, {
   select: (v: UserInfo) => v.Age,
@@ -62,6 +60,7 @@ function App() {
   return (
     <Provider>
       <Suspense fallback={<div>Outer suspense...</div>}>
+        <Auth/>
         <UserPage uid={uid}/>
       </Suspense>
     </Provider>
@@ -80,7 +79,6 @@ const UserPage = ({uid}: { uid: string }) => {
   useDocSubscriber(userInfoSubscriber(db.collection('Users').doc(uid)))
   return (
     <div>
-      <Auth/>
       <FirstName/>
       <LastName/>
       <FullName/>

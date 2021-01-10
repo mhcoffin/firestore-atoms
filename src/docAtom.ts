@@ -54,27 +54,27 @@ export type Options<T extends RequiredTimestamps> = {
 
 /**
  * Creates an atom that mirrors a firestore document, as well as a subscriber
- * function that can be invoked to subscribe to a document. The intent is that
+ * that can be used to subscribe to a document. The intent is that
  * the atom will mirror the firestore value as long as the subscriber is active.
  *
- * The returned atom will initially be suspended for both read and write
- * until the subscriber is runs and the page is retrieved for the first time.
- * Thereafter the atom acts like a normal PrimitiveAtom<T>. Reading from it will
- * return the current value of the firestore document. Updating it will
- * modify the firestore document (suspending briefly). Remote updates to
- * the atom page will cause the atom to update as well.
+ * The returned atom will be suspended for both read and write until the subscriber
+ * runs and the page is retrieved for the first time. Thereafter the atom acts
+ * like a normal PrimitiveAtom<T>. Reading from it will return the current value
+ * of the firestore document. Updating it will modify the firestore document
+ * (suspending briefly). Remote updates to the atom page will cause the atom to
+ * update as well.
  *
  * The returned subscriber should be activated in some react component via
  * the hook:
  * ```
- *   useDocSubscriber(subscriber(documentReference))
+  *   useDocSubscriber(subscriber(documentReference))
  * ```
  * The subscription will be established when the component is mounted and
  * cancelled when the component is dismounted. The subscription must be
  * established in a component that does not actually use the value of atom.
- * If you try to use the atom value from the same react component that
+ * (If you try to use the atom value from the same react component that
  * subscribes to it, it will suspend before it gets a chance to subscribe
- * and you will be stuck on the {@link Suspense} fallback page.
+ * and you will be stuck on the {@link Suspense} fallback page.)
  *
  * The subscriber tries to be smart about updating the atom: when a new value
  * is set, either because of a remote update or a local one, the atom value
@@ -405,6 +405,30 @@ const typ = (obj: any) => {
       return 'object'
   }
 }
+
+type Slice<V, S> = {
+  select: (v: V) => S,
+  inject: (v: V, s: S) => V
+}
+
+export const sliceAtom = <T, S>(anAtom: PrimitiveAtom<T>, slice: Slice<T, S>) => {
+  return atom(
+    (get) => slice.select(get(anAtom)),
+    (get, set, update: SetStateAction<S>) => {
+      const newSliceValue = update instanceof Function ? update(slice.select(get(anAtom))) : update
+      set(anAtom, slice.inject(get(anAtom), newSliceValue))
+    }
+  )
+}
+
+export const fieldAtom = <V, K extends keyof V>(anAtom: PrimitiveAtom<V>, field: K) => {
+  return sliceAtom<V, V[K]>(anAtom, {
+    select: (v: V) => v[field],
+    inject: (v: V, s: V[K]) => ({...v, [field]: s})
+  })
+}
+
+
 
 export const testable = {
   deq, updateConservatively, firestoreDiff
